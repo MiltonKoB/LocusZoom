@@ -1,0 +1,38 @@
+#!/usr/bin/env python
+
+#===============================================================================
+# Copyright (C) 2010 Ryan Welch, Randall Pruim
+# 
+# LocusZoom is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# LocusZoom is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#===============================================================================
+
+import sys
+import os
+
+# Python executable. 
+pyex = sys.executable;
+
+# First, try to find locuszoom at a relative location to where this script is located. 
+script_dir = os.path.dirname(os.path.realpath(sys.argv[0]));
+locuszoom = os.path.join(script_dir,"../src/m2zfast.py");
+if os.path.isfile(locuszoom):
+  e = pyex + " -OO " + locuszoom + " " + " ".join(sys.argv[1:]);
+  os.system(e);
+
+# That apparently failed, so now let's try the environment variable "LOCUSZOOM_PATH". 
+locuszoom_path = os.environ.get("LOCUSZOOM_PATH");
+if locuszoom_path != None:
+  locuszoom_abspath = os.path.join(locuszoom_path,"src/m2zfast.py");
+  e = pyex + " -OO " + locuszoom_abspath + " " + " ".join(sys.argv[1:]);
+  os.system(e);

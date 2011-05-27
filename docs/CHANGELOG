@@ -1,0 +1,25 @@
+1.0.3:
+------
+-- fixed bug where metal files with p-values only within the range [0.1,1] were double -log10 transformed
+-- fixed bug in dbmeister.py where indices were not being created after inserting a new snp_pos table, resulting in absurdly long runtimes
+-- fixed bug where user supplied database would cause a crash in certain instances (especially forcing offline mode with --offline 1) 
+-- changed how gzip/bzip2 files are detected (no longer depends on file extension) 
+
+1.0.2:
+------ 
+-- added LD files for 1000G June 2010 release
+-- added additional populations to LD files for 1000G Aug 2009 (now includes YRI and CHB+JPT). 
+-- added support for automatically converting between 1000G chr:pos format and rs# format for SNPs when a difference exists between the user's association results file and LD genotype files (try to use rs# naming if possible, as this is less error prone)
+-- fixed bug in LD cache where a reference SNP with no LD able to be computed would cause a crash
+-- fixed bug where blank lines in the user's association results file would cause a crash
+-- changed --ld to allow for both relative and absolute paths
+-- changed error message to read "locuszoom.R" instead of previous "metal2zoom.R"
+
+1.0.1:
+------
+-- fixed crash if user's python was not compiled with bz2 support
+-- fixed --cache None, this will now properly skip creating a LD cache file
+
+1.0:
+----
+-- initial release
