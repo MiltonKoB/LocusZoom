@@ -280,6 +280,9 @@ def findPos(snp,build):
   for row in cur:
     results.append(row);
     
+  if len(results) == 0:
+    return (None,None);
+    
   chr = results[0][1];
   pos = results[0][2];
   if len(results) > 1:
@@ -330,121 +333,136 @@ def is_bz2(file):
 
   return b;
 
-# Given a metal file, this function extracts the region from the file between
-# chr/start/end.
-def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,build,delim):
-  region = "chr%s:%s-%s" % (str(chr),start,end);
-  output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
-
-  db = find_relative(SQLITE_DB);
-  if db == None or not os.path.isfile(db):
-    die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
+class Pocull:
+  def __init__(self):
+    self.sptable = None;
+    self.build = None;
   
-  con = sqlite3.connect(db);
-  query = """
-    SELECT rs_orig as snp,chr,pos
-    FROM %(snp_table)s p
-    INNER JOIN %(trans_table)s t on (t.rs_current = p.snp)
-    WHERE chr = %(chr)i AND pos < %(end)i AND pos > %(start)i
-  """ % {'snp_table':SQLITE_SNP_POS,'trans_table':SQLITE_TRANS,'chr':chr,'end':end,'start':start}
-  cur = con.execute(query);
+  def run_cull(self,metal_file,snp_column,pval_column,no_transform,chr,start,end,build,delim):
+    region = "chr%s:%s-%s" % (str(chr),start,end);
+    output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
   
-  sptable = {};
-  while 1:
-    row = cur.fetchone();
-    if row != None:
-      sptable.setdefault(row[0],(int(row[1]),int(row[2])));
-    else:
-      break;
-
-  cur.close();
-
-  # Open file for reading. Attempt to determine if file is compressed before opening. 
-  if is_gzip(metal_file):
-    f = gz_univ_readline(metal_file); # throws exception if gz not on system
-  elif is_bz2(metal_file):
-    try:
-      f = bz2.BZ2File(metal_file,"rU");
-    except NameError:
-      die("Error: bz2 is not supported on your system.");
-  else:
-    f = open(metal_file,"rU");
-
-  # Find snp column.
-  metal_header = f.next().rstrip().split(delim);
-  snp_col = None; 
-  if snp_column != None:
-    if type(snp_column) == type(str()):
-      snp_col = findCol(metal_header,snp_column);
-    elif type(snp_column) == type(int()):
-      snp_col = snp_column;
-    else:
-      die("Error: marker column specified with something other than a string or integer: %s" % str(snp_column));
-
-  # After all that, we still couldn't find the snp column. Fail..
-  if snp_col == None:
-    msg = "Error: could not locate SNP column in data. You may need to specify "\
-          "it using --markercol <snp column name>. Your delimiter should also "\
-          "be specified if it is not a tab by using --delim.";
-    die(msg);
-
-  # Find p-value column.
-  pval_col = None;
-  if pval_column != None:
-    if type(pval_column) == type(str()):
-      pval_col = findCol(metal_header,pval_column);
-    elif type(pval_column) == type(int()):
-      pval_col = pval_column;
-    else:
-      die("Error: pval column specified with something other than a string or integer: %s" % str(pval_column)); 
-
-  # We still couldn't find the p-value column. FAIL!
-  if pval_col == None:
-    die("Error: could not locate p-value column in data, column name I'm looking for is: %s. Is your delimiter correct?" % (pval_column));
-  
-  out = open(output_file,"w");
-  print >> out, "\t".join(["chr","pos"] + metal_header);
-  format_str = "\t".join(["%i","%i"] + ["%s" for i in xrange(len(metal_header))]);
-  
-  found_in_region = False;
-  for line in f:
-    # Skip blank lines. 
-    if line.rstrip() == "":
-      continue;
+    db = find_relative(SQLITE_DB);
+    if db == None or not os.path.isfile(db):
+      die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
     
-    e = line.rstrip().split(delim);
-    snp = e[snp_col];
-
-    # Is this a 1000G SNP? If so, we can pull the position from it.
-    gcheck = parse1000G(snp);
-    if gcheck:
-      gchr = gcheck[0];
-      gpos = gcheck[1];
+    if build != self.build:
+      self.sptable = None;
+    
+    self.build = build;
+    
+    # Load position table, if we haven't before. 
+    if self.sptable == None:
+      con = sqlite3.connect(db);
+      query = """
+        SELECT rs_orig as snp,chr,pos
+        FROM %(snp_table)s p
+        INNER JOIN %(trans_table)s t on (t.rs_current = p.snp)
+        WHERE chr = %(chr)i AND pos < %(end)i AND pos > %(start)i
+      """ % {'snp_table':SQLITE_SNP_POS,'trans_table':SQLITE_TRANS,'chr':chr,'end':end,'start':start}
+      cur = con.execute(query);
       
-      if gchr == int(chr) and gpos > int(start) and gpos < int(end):
-        sptable.setdefault(snp,(gchr,gpos));
-
-    if snp in sptable:
-      found_in_region = True;
-      
-      # Insert fixed log10 p-value
-      pval = e[pval_col];
+      self.sptable = {};
+      while 1:
+        row = cur.fetchone();
+        if row != None:
+          self.sptable.setdefault(row[0],(int(row[1]),int(row[2])));
+        else:
+          break;
+    
+      cur.close();
   
-      if is_number(pval):      
-        if not no_transform:
-          e[pval_col] = str(-1*decimal.Decimal(pval).log10());
-        
-        (schr,spos) = sptable.get(snp);
-        e[snp_col] = "chr%i:%i" % (schr,spos);
-        elements = (schr,spos) + tuple(e);
-        print >> out, format_str % elements;
+    # Open file for reading. Attempt to determine if file is compressed before opening. 
+    if is_gzip(metal_file):
+      f = gz_univ_readline(metal_file); # throws exception if gz not on system
+    elif is_bz2(metal_file):
+      try:
+        f = bz2.BZ2File(metal_file,"rU");
+      except NameError:
+        die("Error: bz2 is not supported on your system.");
+    else:
+      f = open(metal_file,"rU");
+  
+    # Find snp column.
+    metal_header = f.next().rstrip().split(delim);
+    snp_col = None; 
+    if snp_column != None:
+      if type(snp_column) == type(str()):
+        snp_col = findCol(metal_header,snp_column);
+      elif type(snp_column) == type(int()):
+        snp_col = snp_column;
       else:
-        print >> sys.stderr, "Warning: SNP %s has invalid p-value: %s, skipping.." % (snp,str(pval));
+        die("Error: marker column specified with something other than a string or integer: %s" % str(snp_column));
+  
+    # After all that, we still couldn't find the snp column. Fail..
+    if snp_col == None:
+      msg = "Error: could not locate SNP column in data. You may need to specify "\
+            "it using --markercol <snp column name>. Your delimiter should also "\
+            "be specified if it is not a tab by using --delim.";
+      die(msg);
+  
+    # Find p-value column.
+    pval_col = None;
+    if pval_column != None:
+      if type(pval_column) == type(str()):
+        pval_col = findCol(metal_header,pval_column);
+      elif type(pval_column) == type(int()):
+        pval_col = pval_column;
+      else:
+        die("Error: pval column specified with something other than a string or integer: %s" % str(pval_column)); 
+  
+    # We still couldn't find the p-value column. FAIL!
+    if pval_col == None:
+      die("Error: could not locate p-value column in data, column name I'm looking for is: %s. Is your delimiter correct?" % (pval_column));
+    
+    out = open(output_file,"w");
+    print >> out, "\t".join(["chr","pos"] + metal_header);
+    format_str = "\t".join(["%i","%i"] + ["%s" for i in xrange(len(metal_header))]);
+    
+    found_in_region = False;
+    for line in f:
+      # Skip blank lines. 
+      if line.rstrip() == "":
+        continue;
+      
+      e = line.rstrip().split(delim);
+      snp = e[snp_col];
+  
+      # Is this a 1000G SNP? If so, we can pull the position from it.
+      gcheck = parse1000G(snp);
+      if gcheck:
+        gchr = gcheck[0];
+        gpos = gcheck[1];
+        
+        if gchr == int(chr) and gpos > int(start) and gpos < int(end):
+          self.sptable.setdefault(snp,(gchr,gpos));
+  
+      if snp in self.sptable:
+        found_in_region = True;
+        
+        # Insert fixed log10 p-value
+        pval = e[pval_col];
+    
+        if is_number(pval):      
+          if not no_transform:
+            e[pval_col] = str(-1*decimal.Decimal(pval).log10());
+          
+          (schr,spos) = self.sptable.get(snp);
+          e[snp_col] = "chr%i:%i" % (schr,spos);
+          elements = (schr,spos) + tuple(e);
+          print >> out, format_str % elements;
+        else:
+          print >> sys.stderr, "Warning: SNP %s has invalid p-value: %s, skipping.." % (snp,str(pval));
+  
+    f.close();
+    out.close();
+  
+    return (found_in_region,output_file);
+  
+  def __call__(self,*args,**kwargs):
+    self.run_cull(*args,**kwargs);
 
-  f.close();
-  out.close();
-
-  return (found_in_region,output_file);
+myPocull = Pocull().run_cull;
 
 # Runs the R script which actually generates the plot. 
 def runM2Z(metal,ld_file,refsnp,chr,start,end,verbose,args=""):
@@ -559,6 +577,10 @@ def readWhitespaceHitList(file,build):
 
     e = line.split();
     e[-1] = e[-1].strip();
+    
+    if len(e) < 6:
+      print >> sys.stderr, "Error: hitspec line not formatted properly, missing the proper number of columns on line #%i: %s" (lineno,str(line));
+      continue;
 
     if e[5] == 'no'or e[5] == "":
       continue;
