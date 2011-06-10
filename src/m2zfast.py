@@ -940,7 +940,8 @@ def getSettings():
       (chr,pos) = findPos(snp,build=opts.build);
       
       if chr == None or pos == None:
-        die("Error: could not find chr/pos information for SNP %s in database." % opts.refsnp);
+        print >> sys.stderr, "Error: could not find chr/pos information for SNP %s in database, skipping.." % opts.refsnp;
+        continue;
       
       if opts.flank:
         opts.snplist.append( (snp,chr,pos-opts.flank,pos+opts.flank) );
