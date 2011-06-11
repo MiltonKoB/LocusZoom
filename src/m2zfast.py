@@ -47,9 +47,9 @@ except:
   print >> sys.stderr, "Warning: bz2 not available on this system";
 
 # Program strings.
-M2ZFAST_VERSION = "1.0.3";
+M2ZFAST_VERSION = "1.1";
 M2ZFAST_TITLE = "+---------------------------------------------+\n"\
-                "| LocusZoom 1.0.3                             |\n"\
+                "| LocusZoom 1.1                               |\n"\
                 "| Plot regional association results           |\n"\
                 "| from GWA scans or candidate gene studies    |\n"\
                 "+---------------------------------------------+\n";
@@ -137,6 +137,7 @@ def quoteArgs(m2z_args):
 # Tests to see if the supplied string is a SNP.
 # The SNP should be of the form: rs##### or chr#:pos.
 def isSNP(string):
+  string = str(string);
   if RE_SNP_RS.search(string):
     return True;
   elif RE_SNP_1000G.search(string):
@@ -219,6 +220,7 @@ def transSNP(snp):
   if new_name == None:
     return snp;
   else:
+    print >> sys.stderr, "Warning: %s is not the current name in genome build (should be: %s)" % (snp,new_name);
     return new_name;
 
 # Given a gene, return info for it from the database. 
@@ -281,6 +283,7 @@ def findPos(snp,build):
     results.append(row);
     
   if len(results) == 0:
+    con.close();
     return (None,None);
     
   chr = results[0][1];
@@ -338,21 +341,14 @@ class Pocull:
     self.sptable = None;
     self.build = None;
   
-  def run_cull(self,metal_file,snp_column,pval_column,no_transform,chr,start,end,build,delim):
-    region = "chr%s:%s-%s" % (str(chr),start,end);
-    output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
-  
-    db = find_relative(SQLITE_DB);
-    if db == None or not os.path.isfile(db):
-      die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
-    
-    if build != self.build:
-      self.sptable = None;
-    
-    self.build = build;
-    
+  def _lazy_load_table(self):
     # Load position table, if we haven't before. 
     if self.sptable == None:
+      db = find_relative(SQLITE_DB);
+      if db == None or not os.path.isfile(db):
+        die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
+      
+      print "Loading SNP positions from database..";
       con = sqlite3.connect(db);
       query = """
         SELECT rs_orig as snp,chr,pos
@@ -371,6 +367,22 @@ class Pocull:
           break;
     
       cur.close();
+    
+  def get_pos(self,snp):
+    self._lazy_load_table();
+    return self.sptable.get(snp);
+    
+  def run_cull(self,metal_file,snp_column,pval_column,no_transform,chr,start,end,build,delim):
+    region = "chr%s:%s-%s" % (str(chr),start,end);
+    output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
+    
+    # If asked to find positions for different build than currently loaded, reset dict. 
+    if build != self.build:
+      self.sptable = None;
+    self.build = build;
+    
+    # Load SNP position table into dict, unless already done previously. 
+    self._lazy_load_table();
   
     # Open file for reading. Attempt to determine if file is compressed before opening. 
     if is_gzip(metal_file):
@@ -460,9 +472,9 @@ class Pocull:
     return (found_in_region,output_file);
   
   def __call__(self,*args,**kwargs):
-    self.run_cull(*args,**kwargs);
+    return self.run_cull(*args,**kwargs);
 
-myPocull = Pocull().run_cull;
+poculler = Pocull();
 
 # Runs the R script which actually generates the plot. 
 def runM2Z(metal,ld_file,refsnp,chr,start,end,verbose,args=""):
@@ -602,17 +614,22 @@ def readWhitespaceHitList(file,build):
 
     if flank != None and flank != "NA":
       if isSNP(snp):
-        (fchr,fpos) = findPos(snp,build);
-        snp = "chr%s:%s" % (fchr,fpos);
+        snp = SNP(snp=snp);
+        snp.tsnp = transSNP(snp.snp);
+        (fchr,fpos) = findPos(snp.tsnp,build);
+        snp.chr = fchr;
+        snp.pos = fpos;
+        snp.chrpos = "chr%s:%s" % (fchr,fpos);
+        
         try:
           chr = int(fchr);
           start = fpos - flank;
           end = fpos + flank;
         except:
           if fchr == None or fpos == None:
-            print >> sys.stderr, "Error: could not find position for SNP %s, skipping.." % snp;
+            print >> sys.stderr, "Error: could not find position for SNP %s, skipping.." % e[0];
           else:
-            print >> sys.stderr, "Error: bad chromosome/position for SNP %s, chr/pos were: %s,%s, skipping.." % (snp,str(fchr),str(fpos));
+            print >> sys.stderr, "Error: bad chromosome/position for SNP %s, chr/pos were: %s,%s, skipping.." % (e[0],str(fchr),str(fpos));
           continue;
       else:
         gene_info = findGeneInfo(snp,build);
@@ -724,6 +741,17 @@ def printArgs(args):
 
 def printHeader(title):
   print title;
+
+class SNP:
+  def __init__(self,snp=None,tsnp=None,chrpos=None,chr=None,pos=None):
+    self.snp = snp;
+    self.tsnp = tsnp;
+    self.chrpos = chrpos;
+    self.chr = chr;
+    self.pos = pos;
+  
+  def __str__(self):
+    return self.snp;
 
 # Parse command line arguments and return a tuple (opts,args) where:
 # opts - settings that are specific to the program and have been error-checked
@@ -903,18 +931,21 @@ def getSettings():
 
   # Change refSNP into a chr:pos SNP. 
   if opts.refsnp:
-    trans_snp = transSNP(opts.refsnp);
-    (chr,pos) = findPos(trans_snp,opts.build);
+    opts.refsnp = SNP(snp=opts.refsnp);
+    opts.refsnp.tsnp = transSNP(opts.refsnp.snp);
+    (chr,pos) = findPos(opts.refsnp.tsnp,opts.build);
   
     if chr == None or pos == None:
       die("Error: could not find chr/pos information for SNP %s in database." % opts.refsnp);
     
-    opts.refsnp = "chr%s:%s" % (chr,pos);
+    opts.refsnp.chrpos = "chr%s:%s" % (chr,pos);
+    opts.refsnp.chr = chr;
+    opts.refsnp.pos = pos;
 
   # Compute start/end positions for each SNP, unless already specified and in refsnp mode.
   opts.snplist = [];
   if opts.refsnp:
-    (chr,pos) = findPos(opts.refsnp,opts.build);
+    (chr,pos) = (opts.refsnp.chr,opts.refsnp.pos);
 
     if opts.flank:
       opts.snplist.append( (opts.refsnp,chr,pos-opts.flank,pos+opts.flank) );
@@ -925,7 +956,7 @@ def getSettings():
       if opts.chr == chr and opts.start < pos and opts.end > pos:
         opts.snplist.append( (opts.refsnp,chr,opts.start,opts.end) );
       else:
-        print >> sys.stderr, "Warning: skipping SNP %s, genomic interval given does not overlap SNP position according to our database." % opts.refsnp;
+        print >> sys.stderr, "Warning: skipping SNP %s, genomic interval given does not overlap SNP position according to our database." % opts.refsnp.snp;
         print >> sys.stderr, "Given interval: %s\t Genomic position: %s" % (
           regionString(opts.chr,opts.start,opts.end),
           "chr" + str(chr) + ":" + str(pos)
@@ -936,11 +967,16 @@ def getSettings():
       opts.snplist.append( (opts.refsnp,chr,pos-def_flank,pos+def_flank) );
       
   elif opts.hits:
-    for snp in opts.hits:
-      (chr,pos) = findPos(snp,build=opts.build);
+    for hit_snp in opts.hits:
+      snp = SNP(snp=hit_snp);
+      snp.tsnp = transSNP(hit_snp);
+      (chr,pos) = findPos(snp.tsnp,build=opts.build);
+      snp.chr = chr;
+      snp.pos = pos;
+      snp.chrpos = "chr%s:%s" % (chr,pos);
       
       if chr == None or pos == None:
-        print >> sys.stderr, "Error: could not find chr/pos information for SNP %s in database, skipping.." % opts.refsnp;
+        print >> sys.stderr, "Error: could not find chr/pos information for SNP %s in database, skipping.." % hit_snp;
         continue;
       
       if opts.flank:
@@ -1205,9 +1241,9 @@ def runQueries(chr,start,stop,snpset,build):
   return results;
 
 def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
-  print "Beginning plotting sequence for: %s" % refsnp;
+  print "Beginning plotting sequence for: %s" % str(refsnp);
   print "Extracting region of interest from metal file..";
-  (bPocull,metal_temp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,build,delim);
+  (bPocull,metal_temp) = poculler(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,build,delim);
   ld_temp = None;
   
   # If poculling does not give us any SNPs in the region, we're done. 
@@ -1239,14 +1275,20 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
   # the best SNP in the region. 
   if not isSNP(refsnp):
     print "Attempting to find best SNP in region..";
-    refsnp = metal.getBestSNPInRegion(chr,start,end)[0];
-    print "Found: %s" % refsnp;  
+    best_snp = metal.getBestSNPInRegion(chr,start,end)[0];
+    print "Found: %s" % best_snp;  
+    
+    refsnp = SNP(snp=best_snp);
+    refsnp.tsnp = transSNP(best_snp);
+    (best_chr,best_pos) = findPos(refsnp.tsnp,build);
+    refsnp.chr = best_chr;
+    refsnp.pos = best_pos;
+    refsnp.chrpos = "chr%s:%s" % (best_chr,best_pos);
 
   # Get refsnp position. 
   # If a position cannot be found, bail out. 
-  refsnp_pos = findPos(refsnp,build)[1];
-  if refsnp_pos == None:
-    print >> sys.stderr, "Error: could not find position for %s, skipping.." % refsnp;
+  if refsnp.pos == None:
+    print >> sys.stderr, "Error: could not find position for %s, skipping.." % str(refsnp);
     if not no_clean:
       print "Deleting temporary files.."
       cleanup([ld_temp,metal_temp]);
@@ -1261,12 +1303,12 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
       if opts.ld == None:
         return; # hack.. but this whole script is a giant hack anyway. 
     else:
-      print "Finding pairwise LD with %s.." % refsnp;
+      print "Finding pairwise LD with %s.." % str(refsnp);
       print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
       precomp_info = getPrecompLDInfo(opts.pop,opts.source,build,PRECOMP_LD_DB);
       if precomp_info != None:
-        precomp_start = refsnp_pos - precomp_info['flank'];
-        precomp_end = refsnp_pos + precomp_info['flank'];
+        precomp_start = refsnp.pos - precomp_info['flank'];
+        precomp_end = refsnp.pos + precomp_info['flank'];
   
         if interval_contained((start,end),(precomp_start,precomp_end)):
           ld_temp = getPrecomputedLD(refsnp,chr,precomp_info['root']);
@@ -1382,7 +1424,7 @@ def main():
         temp_dir += opts.prefix + "_";
       if not opts.no_date:
         temp_dir += time.strftime("%y%m%d") + "_";
-      temp_dir += entry[0];
+      temp_dir += str(entry[0]);
 
       # Setup the temporary directory.
       # If it exists already, it was used on a previous plotting run, and should
@@ -1421,7 +1463,7 @@ def main():
               new_image_name += opts.prefix + "_";
             if not opts.no_date:
               new_image_name += time.strftime("%y%m%d") + "_";
-            new_image_name += windows_filename(entry[0]);
+            new_image_name += windows_filename(str(entry[0]));
             new_image_name += ext;
 
             try:
