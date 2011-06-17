@@ -447,10 +447,11 @@ def runM2Z(metal,ld_file,refsnp,chr,start,end,verbose,args=""):
   if ld_file == None:
     ld_file = "NULL";
 
-  com = "%s metal=%s clobber=F clean=F refsnp=%s ld=%s chr=%s start=%s end=%s %s" % (
+  com = "%s metal=%s clobber=F clean=F refsnp=%s refsnpName=%s ld=%s chr=%s start=%s end=%s %s" % (
     METAL2ZOOM_PATH,
     metal,
     refsnp.chrpos,
+    refsnp.snp,
     ld_file,
     str(chr),
     str(start),
@@ -459,7 +460,7 @@ def runM2Z(metal,ld_file,refsnp,chr,start,end,verbose,args=""):
   );
 
   if _DEBUG:
-    print "DEBUG: metal2zoom command: %s" % com;
+    print "DEBUG: locuszoom.R command: %s" % com;
 
   #if verbose:
   if 1:
@@ -1051,9 +1052,9 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
     
   ld_finder = FugueFinder(settings,cache,fugue_cleanup,verbose);
 
-  ld_success = ld_finder.compute(snp,chr,start,end);
+  ld_success = ld_finder.compute(snp.chrpos,chr,start,end);
   if ld_success:
-    ld_filename = "templd_" + snp + "_" + time.strftime("%y%m%d",time.localtime()) + "-" + time.strftime("%H%M%S",time.localtime()) + ".txt";
+    ld_filename = "templd_" + snp.snp + "_" + time.strftime("%y%m%d",time.localtime()) + "-" + time.strftime("%H%M%S",time.localtime()) + ".txt";
     
     if os.path.isfile(ld_filename):
       print >> sys.stderr, "Warning: LD file already exists for some reason: %s" % ld_filename;
@@ -1064,7 +1065,7 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
       ld_filename = None;
   else:
     print >> sys.stderr, "Warning: LD could not be computed for SNP %s. "\
-    "This SNP does not exist in the genotype files for computing LD from %s/%s/%s.." % (snp,source,build,pop);
+    "This SNP does not exist in the genotype files for computing LD from %s/%s/%s.." % (str(snp),source,build,pop);
     ld_filename = None;
 
   return ld_filename;
