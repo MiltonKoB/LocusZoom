@@ -1152,7 +1152,11 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
         pushViewport(viewport(clip="on",xscale=pvalVp$xscale,yscale=pvalVp$yscale,name='pvalsClipped'));
         grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
 		if (! is.null(refidx)) {
-			grid.refsnp(name=refSnp,pos=metal$pos[refidx]);
+			if (!is.null(args[['refsnpName']])) {
+				grid.refsnp(name=args[['refsnpName']],pos=metal$pos[refidx]);
+			} else{
+				grid.refsnp(name=refSnp,pos=metal$pos[refidx]);
+			}
 		}
 		groupIds <-  sort(unique(metal$group))
 		print(table(metal$group));
@@ -1599,6 +1603,7 @@ default.args <- list(
 	axisTextColor = "gray30",             # color of axis labels
 	requiredGene = NULL,                  # gene name (string)
 	refsnp = NULL,                        # snp name (string)
+	refsnpName = NULL,					  # name given to refsnp on plot (usually same as refsnp)
 	refsnpTextColor = "black",            # color for ref snp label
 	refsnpTextSize = 1,                   # sclaing factor for text size
 	refsnpTextAlpha = 1,                  # alpha for ref snp label
