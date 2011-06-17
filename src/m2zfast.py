@@ -489,30 +489,6 @@ def cleanup(files):
     except:
       print >> sys.stderr, "Warning: failed to remove file %s" % f;
 
-# Extract a set of SNPs from a file.
-# Returns: a set of SNPs
-def parseSNPFile(absolute):
-  if not os.path.isfile(absolute):
-    raise Exception, "Could not find file: " + str(absolute);
-
-  snps = set();
-
-  f = open(absolute);
-  for line in f:
-    elements = line.split();
-    # Add each SNP, but we'll try to detect if it is actually a SNP first.
-    pattern = re.compile("rs(\d+)");
-    for e in elements:
-      # Match only recognizes if it starts at the beginning of the line, which we want,
-      # since SNP names should always start with 'rs' as far as I know.
-      match = pattern.findall(e);
-      if match != None:
-        for digits in match:
-          snps.add("rs" + str(digits));
-  f.close();
-
-  return snps;
-
 # Terminates program with a message, and a list of help options.
 def die_help(msg,parser):
   print >> sys.stderr, msg;
@@ -732,7 +708,6 @@ def getSettings():
   parser.add_option("--markercol",dest="snpcol",help="Name of SNP column or 0-based integer specifying column number.");
   parser.add_option("--cache",dest="cache",help="Change the location of the cache file to use for LD. Set to 'None' to disable.");
   parser.add_option("--hitspec",dest="hitspec",help="File containing a list of SNPs, chromosome, start, and stop.");
-  parser.add_option("--hits",dest="hits",help="File containing hit SNPs.");
   parser.add_option("--refsnp",dest="refsnp",help="Create region plot around this reference SNP.");
   parser.add_option("--refgene",dest="refgene",help="Create region plot flanking a gene.");
   parser.add_option("--flank",dest="flank",help="Distance around refsnp to plot.");
@@ -809,9 +784,9 @@ def getSettings():
       die("Error: temporary directory %s does not exist, you must create it first." % str(opts.tempdir));
 
   # Check to see if --hits and --refsnp were specified together. This shouldn't happen.
-  mode_count = sum(map(lambda x: x != None,[opts.hits,opts.hitspec,opts.refsnp]));
+  mode_count = sum(map(lambda x: x != None,[opts.hitspec,opts.refsnp]));
   if mode_count > 1:
-    die_help("Must specify either --hits, --hitspec, or --refsnp. These options are mutually exclusive.",parser);
+    die_help("Must specify either --hitspec, or --refsnp. These options are mutually exclusive.",parser);
 
   # Check metal file for existence.
   if not opts.metal:
@@ -836,13 +811,7 @@ def getSettings():
     opts.delim = "\t";
 
   # Error checking on main modes.
-  if opts.hits:
-    opts.hits = find_systematic(opts.hits);
-    if opts.hits == None:
-      opts.hits = parseSNPFile(opts.hits);
-    else:
-      die_help("Error: could not locate hits file %s" % str(opts.hits),parser);
-  elif opts.refsnp:
+  if opts.refsnp:
     if not isSNP(opts.refsnp):
       die_help("Error: SNP %s not recognized as SNP" % str(opts.refsnp),parser);
   elif opts.hitspec:
