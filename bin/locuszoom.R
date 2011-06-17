@@ -1,4 +1,6 @@
-#!Rscript --vanilla --default-packages=utils,stats,lattice,grid,getopts
+#! /usr/bin/Rscript --vanilla 
+# --default-packages=utils,stats,lattice,grid,getopts
+# need to check if the line above works on the web deployment machine.
 
 # Copyright 2010 Randall Pruim, Ryan Welch
 # 
@@ -19,6 +21,7 @@ require(stats);
 require(utils);
 require(grid);
 require(lattice);
+require(methods);
 
 omittedGenes <- character(0);     # will be set in gobalenv()
 warningMessages <- character(0);  # will be set in gobalenv()
