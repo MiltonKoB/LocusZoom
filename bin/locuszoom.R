@@ -1,7 +1,4 @@
-#! /usr/bin/Rscript --vanilla 
-# --default-packages=utils,stats,lattice,grid,getopts
-# need to check if the line above works on the web deployment machine.
-
+#!Rscript --vanilla --default-packages=utils,stats,lattice,grid,getopts
 
 # Copyright 2010 Randall Pruim, Ryan Welch
 # 

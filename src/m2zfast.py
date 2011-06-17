@@ -79,19 +79,6 @@ def getLDInfo(pop,source,build,ld_db):
   # If we make it here, the supplied combination of source/build/pop is not supported. 
   return None;
 
-# See getLDInfo - same idea. 
-def getPrecompLDInfo(pop,source,build,precomp_db):
-  if source in precomp_db:
-    node = precomp_db[source];
-    if build in node:
-      node = node[build];
-      if pop in node:
-        # Success! File paths are known for this DB/build/population trio.
-        return node[pop];
-
-  # If we make it here, the supplied combination of source/build/pop is not supported.
-  return None;
-
 # Print a list of all supported population/build/database combinations. 
 def printSupportedTrios(ld_db,precomp_db):
   print "Genotype files available for: ";
@@ -218,6 +205,8 @@ def transSNP(snp):
     print >> sys.stderr, "Warning: SNP %s had multiple names in the latest build.." % snp;
 
   if new_name == None:
+    print >> sys.stderr, "Warning: tried to translate SNP %s to latest name in genome build, but it does not exist in the database table.." % str(snp);
+  elif new_name == snp:
     return snp;
   else:
     print >> sys.stderr, "Warning: %s is not the current name in genome build (should be: %s)" % (snp,new_name);
@@ -896,8 +885,7 @@ def getSettings():
 
     # Check to see if the population, LD source, and build supplied are compatible.
     info_geno = getLDInfo(opts.pop,opts.source,opts.build,LD_DB);
-    info_precomp = getPrecompLDInfo(opts.pop,opts.source,opts.build,PRECOMP_LD_DB);
-    if info_geno == None and info_precomp == None:
+    if info_geno == None:
       print >> sys.stderr, "Error: source %s, population %s, and build %s are not jointly supported." % (
         opts.source,opts.pop,opts.build);
       print >> sys.stderr, "See below for supported combinations.";
@@ -1047,43 +1035,6 @@ def decompGZFile(file,out):
     out.writelines(f);
     f.close();
     out.close();
-
-# Retrieve LD information from Cristen's pre-computed LD files. 
-# This function expects a directory structure like..
-# <root path>
-# -- reduced1
-# -- reduced2
-# ---- 1
-# ------ rs14141
-# ------ rs14233
-#
-# Returns the name of the decompressed LD file to pass on to metal2zoom.R
-# If file doesn't exist, returns None
-def getPrecomputedLD(snp,chr,root_path):
-  # TODO: temporary fix, will likely need to be changed at some point in the future
-  # if and when Cristen generates more precomputed LD files
-  # This code block assumes 1000G SNPs will never work with precomputed LD!
-  gcheck = parse1000G(snp);
-  if gcheck:
-    # This SNP is a 1000G SNP, and currently not supported for pre-computed LD.
-    # Punt!
-    return None;
-  
-  snp_first = snp.split("rs")[1][0];
-  full_path = os.path.join(root_path,"reduced" + str(chr),str(snp_first),snp + '.xt.gz');
-
-  outfile = None;
-  if os.path.isfile(full_path):
-    hash = str(int(time.time())) + "_" + str(os.getpid());
-    outfile = snp + "_templd_" + hash + ".xt";
-
-    f = open(outfile,"w");
-    print >> f, "snp1 snp2 dprime rsquare";
-    f.close();
-
-    decompGZFile(full_path,outfile);
-
-  return outfile;
 
 def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbose):
   ld_info = getLDInfo(pop,source,build,LD_DB);
@@ -1281,26 +1232,8 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
     else:
       print "Finding pairwise LD with %s.." % str(refsnp);
       print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
-      precomp_info = getPrecompLDInfo(opts.pop,opts.source,build,PRECOMP_LD_DB);
-      if precomp_info != None:
-        precomp_start = refsnp.pos - precomp_info['flank'];
-        precomp_end = refsnp.pos + precomp_info['flank'];
-  
-        if interval_contained((start,end),(precomp_start,precomp_end)):
-          ld_temp = getPrecomputedLD(refsnp,chr,precomp_info['root']);
-  
-          # If we can't find precomputed LD, try computing it.
-          if ld_temp == None:
-            print "Pre-computed LD not found, computing on the fly instead..";
-            ld_temp = computeLD(metal,refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
-          else:
-            print "Using pre-computed LD..";
-        else:
-          print "Pre-computed LD available, but requested region is too large. Using new_fugue to compute full region..";
-          ld_temp = computeLD(metal,refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
-      else:
-        print "Computing LD using new_fugue.."
-        ld_temp = computeLD(metal,refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
+      print "Computing LD using new_fugue.."
+      ld_temp = computeLD(metal,refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
   else:
     print "Skipping LD computations, --no-ld was given..";
     ld_temp = "NULL";
