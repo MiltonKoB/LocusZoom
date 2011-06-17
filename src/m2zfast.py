@@ -246,48 +246,48 @@ def findGeneInfo(gene,build):
   # Return row, with fixed chromosome (see chrom2chr function.) 
   return row;
 
-# Lookup a SNP's position in the database.
-# If the SNP is a 1000G SNP, it simply returns the position given. 
-def findPos(snp,build):
-  # If the SNP is a 1000G SNP, it already knows its chrom/pos by definition,
-  # i.e. the SNP will be chr4:91941. 
-  gcheck = parse1000G(snp);
-  if gcheck:
-    return gcheck;
-  
-  chr = None;
-  pos = None;
-  if _DEBUG:
-    print >> sys.stderr, "DEBUG: Querying SQLite database for SNP %s position.." % snp;
+class PosLookup:
+  def __init__(self,db_file=SQLITE_DB,snp_table=SQLITE_SNP_POS,trans_table=SQLITE_TRANS):
+    if not os.path.isfile(db_file):
+      sys.exit("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
+      
+    self.db = sqlite3.connect(db_file);
+    self.execute = self.db.execute;
     
-  db = find_relative(SQLITE_DB);
-  if not os.path.isfile(db):
-    die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
-  
-  con = sqlite3.connect(db);
-  cur = con.execute("SELECT snp,chr,pos FROM %s WHERE snp='%s'" % (SQLITE_SNP_POS,snp));
-  
-  results = [];
-  for row in cur:
-    results.append(row);
+    self.execute("""
+      CREATE TEMP VIEW snp_pos_trans AS SELECT rs_orig as snp,chr,pos FROM %s p INNER JOIN %s t ON (t.rs_current = p.snp);
+    """ % (snp_table,trans_table));
     
-  if len(results) == 0:
-    con.close();
-    return (None,None);
+    self.query = """
+      SELECT snp,chr,pos FROM snp_pos_trans WHERE snp='%s';
+    """;
+
+  def __call__(self,snp):
+    snp = str(snp);
     
-  chr = results[0][1];
-  pos = results[0][2];
-  if len(results) > 1:
-    region = "chr" + str(chr) + "-" + str(pos);
-    print >> sys.stderr, "Warning: SNP %s had %s entries in database, using first: %s" % (
-      snp,
-      str(cur.rowcount),
-      region
-    );
-  
-  con.close();
+    # If the SNP is a 1000G SNP, it already knows its chrom/pos by definition,
+    # i.e. the SNP will be chr4:91941. 
+    gcheck = parse1000G(snp);
+    if gcheck:
+      return gcheck;
     
-  return (chr,pos);
+    cur = self.execute(self.query % snp);
+    chr = None;
+    pos = None;
+
+    res = 0;
+    for row in cur:
+      chr = row[1];
+      pos = row[2];
+      res += 1;
+
+    region = "chr%s:%s" % (chr,pos);
+    if res > 1:
+      print >> sys.stderr, "Warning: SNP %s has more than 1 position in database, using: %s" % (str(snp),region);
+
+    return (chr,pos);
+
+find_pos = PosLookup();
 
 # Given a list of header elements, determine if col_name is among them. 
 def findCol(header_elements,col_name):
@@ -558,7 +558,7 @@ def readWhitespaceHitList(file,build):
       if isSNP(snp):
         snp = SNP(snp=snp);
         snp.tsnp = transSNP(snp.snp);
-        (fchr,fpos) = findPos(snp.tsnp,build);
+        (fchr,fpos) = find_pos(snp.tsnp);
         snp.chr = fchr;
         snp.pos = fpos;
         snp.chrpos = "chr%s:%s" % (fchr,fpos);
@@ -867,7 +867,7 @@ def getSettings():
   if opts.refsnp:
     opts.refsnp = SNP(snp=opts.refsnp);
     opts.refsnp.tsnp = transSNP(opts.refsnp.snp);
-    (chr,pos) = findPos(opts.refsnp.tsnp,opts.build);
+    (chr,pos) = find_pos(opts.refsnp.tsnp);
   
     if chr == None or pos == None:
       die("Error: could not find chr/pos information for SNP %s in database." % opts.refsnp);
@@ -904,7 +904,7 @@ def getSettings():
     for hit_snp in opts.hits:
       snp = SNP(snp=hit_snp);
       snp.tsnp = transSNP(hit_snp);
-      (chr,pos) = findPos(snp.tsnp,build=opts.build);
+      (chr,pos) = find_pos(snp.tsnp);
       snp.chr = chr;
       snp.pos = pos;
       snp.chrpos = "chr%s:%s" % (chr,pos);
@@ -1044,6 +1044,7 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
 # -- remove rows that do not contain the refsnp
 # -- return None if the header does not contain dprime or rsquare
 # -- return None if refsnp is not ever seen
+# -- translates SNP names into chr:pos format
 # Returns filename of fixed LD file, or None if a failure occurred
 def fixUserLD(file,refsnp):
   # Create temporary file to write LD to.
@@ -1059,12 +1060,13 @@ def fixUserLD(file,refsnp):
   
   # Checks on LD file format. 
   h = f.readline().lower().rstrip();
-  try:
-    h.index("dprime");
-    h.index("rsquare");
-  except:
-    print >> sys.stderr, "Error: user-supplied LD file either does not have a header, or columns 'dprime' and 'rsquare' cannot be found.";
-    return None;
+  
+  for column in ('snp1','snp2','dprime','rsquare'):
+    try:
+      exec "%s_col = h.index(column)" % column;
+    except:
+      print >> sys.stderr, "Error: user-supplied LD file does not have column '%s' in header (or no header row exists.)" % column;
+      return None;
   
   out_file = open(out,"w");
   print >> out_file, h;
@@ -1074,7 +1076,19 @@ def fixUserLD(file,refsnp):
     # If the line contains the refsnp, extract it. 
     if e.find(refsnp) != -1:
       found_refsnp = True;
-      print >> out_file, e;
+      
+      skip = False;
+      for col in (snp1_col,snp2_col):
+        snp = e[col];
+        (chr,pos) = find_pos(snp);
+        if chr != None and pos != None:
+          e[col] = "chr%s:%s" % (chr,pos);
+        else:
+          print >> sys.stderr, "Warning: could not find position for SNP %s in user-supplied --ld file, skipping.." % str(snp);
+          skip = True;
+          
+      if not skip:
+        print >> out_file, e;
   
   f.close();
   out_file.close();
@@ -1082,7 +1096,7 @@ def fixUserLD(file,refsnp):
   if found_refsnp:
     return out;
   else:
-    print >> sys.stderr, "Warning: user-supplied LD file does not contain the reference SNP %s.." % refsnp;
+    print >> sys.stderr, "Error: user-supplied LD file does not contain the reference SNP %s.." % str(refsnp);
     return None;
 
 def windows_filename(name):
@@ -1177,7 +1191,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
     
     refsnp = SNP(snp=best_snp);
     refsnp.tsnp = transSNP(best_snp);
-    (best_chr,best_pos) = findPos(refsnp.tsnp,build);
+    (best_chr,best_pos) = find_pos(refsnp.tsnp);
     refsnp.chr = best_chr;
     refsnp.pos = best_pos;
     refsnp.chrpos = "chr%s:%s" % (best_chr,best_pos);
