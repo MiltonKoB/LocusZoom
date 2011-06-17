@@ -653,8 +653,6 @@ def printOpts(opts):
     table.add_row(['refgene',opts.refgene]);
   elif opts.hitspec:
     table.add_row(['hitspec',opts.hitspec]);
-  elif opts.hits:
-    table.add_row(['hits',opts.hits]);
   elif opts.chr and opts.start and opts.end:
     table.add_row(['chr',opts.chr]);
     table.add_row(['start',opts.start]);
@@ -900,26 +898,6 @@ def getSettings():
       def_flank = convertFlank(DEFAULT_SNP_FLANK);
       opts.snplist.append( (opts.refsnp,chr,pos-def_flank,pos+def_flank) );
       
-  elif opts.hits:
-    for hit_snp in opts.hits:
-      snp = SNP(snp=hit_snp);
-      snp.tsnp = transSNP(hit_snp);
-      (chr,pos) = findPos(snp.tsnp,build=opts.build);
-      snp.chr = chr;
-      snp.pos = pos;
-      snp.chrpos = "chr%s:%s" % (chr,pos);
-      
-      if chr == None or pos == None:
-        print >> sys.stderr, "Error: could not find chr/pos information for SNP %s in database, skipping.." % hit_snp;
-        continue;
-      
-      if opts.flank:
-        opts.snplist.append( (snp,chr,pos-opts.flank,pos+opts.flank) );
-      else:
-        print "No flank or chr/start/stop given, using default flank of %s..." % DEFAULT_SNP_FLANK;
-        def_flank = convertFlank(DEFAULT_SNP_FLANK);
-        opts.snplist.append( (snp,chr,pos-def_flank,pos+def_flank) );
-  
   elif opts.hitspec:
     opts.snplist = readWhitespaceHitList(opts.hitspec,opts.build);
   
