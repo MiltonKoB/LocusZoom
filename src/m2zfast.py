@@ -756,10 +756,10 @@ def getSettings():
   # Should we override M2Z path?
   if opts.m2zpath != None:
     if os.path.isfile(opts.m2zpath):
-      print "Overriding metal2zoom path: %s" % opts.m2zpath;
+      print "Overriding locuszoom.R path: %s" % opts.m2zpath;
       globals()['METAL2ZOOM_PATH'] = os.path.abspath(os.path.expanduser(opts.m2zpath));
     else:
-      print "Metal2zoom override specified, but path \'%s\' does not exist - using default." % opts.m2zpath;
+      print "locuszoom.R override specified, but path \'%s\' does not exist - using default." % opts.m2zpath;
       print "Current directory is: %s" % os.getcwd();
 
   # Are we running in experimental mode?
@@ -784,7 +784,7 @@ def getSettings():
   # Check to see if --hits and --refsnp were specified together. This shouldn't happen.
   mode_count = sum(map(lambda x: x != None,[opts.hitspec,opts.refsnp]));
   if mode_count > 1:
-    die_help("Must specify either --hitspec, or --refsnp. These options are mutually exclusive.",parser);
+    die_help("Must specify either --refsnp or --hitspec. These options are mutually exclusive.",parser);
 
   # Check metal file for existence.
   if not opts.metal:
