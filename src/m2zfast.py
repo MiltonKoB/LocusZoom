@@ -46,6 +46,12 @@ try:
 except:
   print >> sys.stderr, "Warning: bz2 not available on this system";
 
+try:
+  import sqlite3
+except:
+  print >> sys.stderr, "Error: your python interpeter is not compiled against sqlite3 (is it really out of date?)";
+  raise;
+
 # Program strings.
 M2ZFAST_VERSION = "1.1";
 M2ZFAST_TITLE = "+---------------------------------------------+\n"\
@@ -54,15 +60,43 @@ M2ZFAST_TITLE = "+---------------------------------------------+\n"\
                 "| from GWA scans or candidate gene studies    |\n"\
                 "+---------------------------------------------+\n";
 
+# Program constants. 
+M2ZFAST_CONF = "conf/m2zfast.conf";
+DEFAULT_SNP_FLANK = "200kb";
+DEFAULT_GENE_FLANK = "20kb";
+RE_SNP_1000G = re.compile("chr(\d+|[a-zA-z]+):(\d+)$");
+RE_SNP_RS = re.compile("rs(\d+)");
+M2ZCL_FIRST = False;
+MULTI_CAP = 8; 
+
+# Database constants. 
+SQLITE_SNP_POS = "snp_pos";
+SQLITE_REFFLAT = "refFlat";
+SQLITE_SNP_SET = "snp_set";
+SQLITE_VAR_ANNOT = "var_annot";
+SQLITE_RECOMB_RATE = "recomb_rate";
+SQLITE_TRANS = "refsnp_trans";
+
 # Debug flag. Makes all output "more verbose."
 _DEBUG = False;
 
 # Fix path of script to be absolute.
 sys.argv[0] = os.path.abspath(sys.argv[0]);
 
-# Load program constants. 
-conf_file = find_relative("conf/m2zfast.conf");
-execfile(conf_file);
+@singleton
+class Conf(object):
+  def __init__(self,conf_file):
+    self._load(conf_file);
+
+  def _load(self,file):
+    conf_dict = {};
+    execfile(file,conf_dict);
+
+    for k,v in conf_dict.iteritems():
+      exec "self.%s = v" % str(k);
+
+def getConf(conf_file=M2ZFAST_CONF):
+  return Conf(conf_file);
 
 # Get LD file information given parameters.
 # Returns a dictionary with 4 elements:
@@ -80,21 +114,13 @@ def getLDInfo(pop,source,build,ld_db):
   return None;
 
 # Print a list of all supported population/build/database combinations. 
-def printSupportedTrios(ld_db,precomp_db):
+def printSupportedTrios(ld_db):
   print "Genotype files available for: ";
   for source in ld_db:
     print source;
     for build in ld_db[source]:
       print "+- %s" % build;
       for pop in ld_db[source][build]:
-        print "   +- %s" % pop;
-        
-  print "Pre-computed LD files available for: ";
-  for source in precomp_db:
-    print source;
-    for build in precomp_db[source]:
-      print "+- %s" % build;
-      for pop in precomp_db[source][build]:
         print "   +- %s" % pop;
 
 def parseArgs(args):
@@ -187,11 +213,10 @@ def timeString(seconds):
     string += ":" + str(secs) + "s";
   return string;
 
-def transSNP(snp):
-  db = find_relative(SQLITE_DB);
-  con = sqlite3.connect(db);
+def transSNP(snp,db_file):
+  con = sqlite3.connect(db_file);
 
-  cur = con.execute("SELECT * FROM %s where rs_orig='%s'" % (SQLITE_TRANS,snp));
+  cur = con.execute("SELECT * FROM %s where rs_orig='%s'" % (conf.SQLITE_TRANS,snp));
 
   new_name = None;
   while 1:
@@ -213,9 +238,8 @@ def transSNP(snp):
     return new_name;
 
 # Given a gene, return info for it from the database. 
-def findGeneInfo(gene,build):
-  db = find_relative(SQLITE_DB);
-  con = sqlite3.connect(db);
+def findGeneInfo(gene,db_file):
+  con = sqlite3.connect(db_file);
   cur = con.execute("SELECT chrom,txStart,txEnd,cdsStart,cdsEnd FROM %s WHERE geneName='%s'" % (SQLITE_REFFLAT,gene));
 
   row = None;
@@ -247,7 +271,7 @@ def findGeneInfo(gene,build):
   return row;
 
 class PosLookup:
-  def __init__(self,db_file=SQLITE_DB,snp_table=SQLITE_SNP_POS,trans_table=SQLITE_TRANS):
+  def __init__(self,db_file):  
     if not os.path.isfile(db_file):
       sys.exit("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
       
@@ -256,7 +280,7 @@ class PosLookup:
     
     self.execute("""
       CREATE TEMP VIEW snp_pos_trans AS SELECT rs_orig as snp,chr,pos FROM %s p INNER JOIN %s t ON (t.rs_current = p.snp);
-    """ % (snp_table,trans_table));
+    """ % (SQLITE_SNP_POS,SQLITE_TRANS));
     
     self.query = """
       SELECT snp,chr,pos FROM snp_pos_trans WHERE snp='%s';
@@ -286,8 +310,6 @@ class PosLookup:
       print >> sys.stderr, "Warning: SNP %s has more than 1 position in database, using: %s" % (str(snp),region);
 
     return (chr,pos);
-
-find_pos = PosLookup();
 
 # Given a list of header elements, determine if col_name is among them. 
 def findCol(header_elements,col_name):
@@ -327,15 +349,11 @@ def is_bz2(file):
 
 # Given a metal file, this function extracts the region from the file between
 # chr/start/end.
-def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,build,delim):
+def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_file,delim):
   region = "chr%s:%s-%s" % (str(chr),start,end);
   output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
-
-  db = find_relative(SQLITE_DB);
-  if db == None or not os.path.isfile(db):
-    die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
   
-  con = sqlite3.connect(db);
+  con = sqlite3.connect(db_file);
   query = """
     SELECT rs_orig as snp,chr,pos
     FROM %(snp_table)s p
@@ -442,13 +460,13 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,build,
   return (found_in_region,output_file);
 
 # Runs the R script which actually generates the plot. 
-def runM2Z(metal,ld_file,refsnp,chr,start,end,verbose,args=""):
+def runM2Z(metal,metal2zoom_path,ld_file,refsnp,chr,start,end,verbose,args=""):
   # If no LD file was created, make m2z use the database instead. 
   if ld_file == None:
     ld_file = "NULL";
 
   com = "%s metal=%s clobber=F clean=F refsnp=%s refsnpName=%s ld=%s chr=%s start=%s end=%s %s" % (
-    METAL2ZOOM_PATH,
+    metal2zoom_path,
     metal,
     refsnp.chrpos,
     refsnp.snp,
@@ -510,9 +528,9 @@ def die_help(msg,parser):
 # If neither is specified, a default flank is used (see DEFAULT_*_FLANK variables.) 
 # Missing values should be entered as "NA"
 # Column 5 is either 'yes' or 'no' denoting whether or not this snp/gene should be plotted. 
-# The final column contains a list of arguments to be passed to metal2zoom, separated by whitespace. 
+# The final column contains a list of arguments to be passed to locuszoom.R, separated by whitespace. 
 # The entire file is whitespace delimited. 
-def readWhitespaceHitList(file,build):
+def readWhitespaceHitList(file,db_file):
   if not os.path.isfile(file):
     die("Could not open hitspec file for reading - check your path.");
 
@@ -522,6 +540,8 @@ def readWhitespaceHitList(file,build):
   # This format should have at least 6 columns.
   if len(h.split()) < 6:
     die("Error: hitspec not formatted properly, see documentation. Should be 6 columns, found: %i " % len(h.split()));
+
+  find_pos = PosLookup(db_file);
 
   snplist = [];
   for line in f:
@@ -557,7 +577,7 @@ def readWhitespaceHitList(file,build):
     if flank != None and flank != "NA":
       if isSNP(snp):
         snp = SNP(snp=snp);
-        snp.tsnp = transSNP(snp.snp);
+        snp.tsnp = transSNP(snp.snp,db_file);
         (fchr,fpos) = find_pos(snp.tsnp);
         snp.chr = fchr;
         snp.pos = fpos;
@@ -574,7 +594,7 @@ def readWhitespaceHitList(file,build):
             print >> sys.stderr, "Error: bad chromosome/position for SNP %s, chr/pos were: %s,%s, skipping.." % (e[0],str(fchr),str(fpos));
           continue;
       else:
-        gene_info = findGeneInfo(snp,build);
+        gene_info = findGeneInfo(snp,db_file);
     
         if gene_info != None:
           if m2z_args == None:
@@ -605,7 +625,7 @@ def readWhitespaceHitList(file,build):
         continue;
       
       # If something wasn't given in the SNP/gene column, need a placeholder.
-      if not isSNP(snp) and findGeneInfo(snp,build) == None:
+      if not isSNP(snp) and findGeneInfo(snp,db_file) == None:
         snp = regionString(chr,start,end);
 
     snplist.append((
@@ -661,6 +681,7 @@ def printOpts(opts):
   display_opts = ('flank','build','ld','pop','source','snpset','db','cache',
     'no_clean','no_transform','verbose','m2zpath','plotonly'
   );
+  
   for opt in display_opts:
     val = getattr(opts,opt);
     if val != None and val:
@@ -684,11 +705,11 @@ def printHeader(title):
 
 class SNP:
   def __init__(self,snp=None,tsnp=None,chrpos=None,chr=None,pos=None):
-    self.snp = snp;
-    self.tsnp = tsnp;
-    self.chrpos = chrpos;
-    self.chr = chr;
-    self.pos = pos;
+    self.snp = snp;         # snp name given by user
+    self.tsnp = tsnp;       # snp name translated to current genome build
+    self.chrpos = chrpos;   # "chrpos" name for SNP, e.g. chr#:###
+    self.chr = chr;         # chromosome
+    self.pos = pos;         # position
   
   def __str__(self):
     return self.snp;
@@ -697,8 +718,10 @@ class SNP:
 # opts - settings that are specific to the program and have been error-checked
 # opts looks like an object, settings are of the form: opt.some_setting
 # args - all command line arguments that were positional, these are not checked
-# and are immediately passed on to metal2zoom.R 
+# and are immediately passed on to locuszoom.R 
 def getSettings():
+  conf = getConf();
+  
   parser = OptionParser();
   parser.add_option("--metal",dest="metal",help="Metal file.");
   parser.add_option("--delim",dest="delim",help="Delimiter for metal file.");
@@ -718,7 +741,7 @@ def getSettings():
   parser.add_option("--pop",dest="pop",help="Population to use for LD.");
   parser.add_option("--source",dest="source",help="Source to use for LD (defaults to hapmap.)");
   parser.add_option("--snpset",dest="snpset",help="Set of SNPs to plot as a rug.");
-  parser.add_option("--no-cleanup",dest="no_clean",action="store_true",help="Leave temporary files generated by this script. This does not affect clobber or clean in metal2zoom.");
+  parser.add_option("--no-cleanup",dest="no_clean",action="store_true",help="Leave temporary files generated by this script. This does not affect clobber or clean in locuszoom.R.");
   parser.add_option("--no-transform",dest="no_trans",action="store_true",help="Disable automatic transformation of p-values.");
   parser.add_option("-v","--verbose",dest="verbose",action="store_true",help="Make the script be more talkative.");
   parser.add_option("--multi",dest="multi",type="int",help="Number of zoomplots to create in parallel. Default is 1 (serial mode). (not yet implemented)");
@@ -737,7 +760,7 @@ def getSettings():
     no_clean = False,
     no_ld = False,
     no_transform = False,
-    build = LATEST_BUILD,
+    build = conf.LATEST_BUILD,
     plotonly = False,
     prefix = None,
     pvalcol = "P-value",
@@ -757,7 +780,12 @@ def getSettings():
   if opts.m2zpath != None:
     if os.path.isfile(opts.m2zpath):
       print "Overriding locuszoom.R path: %s" % opts.m2zpath;
-      globals()['METAL2ZOOM_PATH'] = os.path.abspath(os.path.expanduser(opts.m2zpath));
+      opts.metal2zoom_path = os.path.abspath(os.path.expanduser(opts.m2zpath));
+      
+      opts.metal2zoom_path = find_systematic(opts.metal2zoom_path);
+      if opts.metal2zoom_path == None:
+        die("Error: could not find locuszoom.R - check conf file %s" % M2ZFAST_CONF);
+      
     else:
       print "locuszoom.R override specified, but path \'%s\' does not exist - using default." % opts.m2zpath;
       print "Current directory is: %s" % os.getcwd();
@@ -770,11 +798,16 @@ def getSettings():
   # Did they specify a SQLite database to use? 
   if opts.db:
     if os.path.isfile(opts.db):
-      globals()['SQLITE_DB'] = os.path.abspath(opts.db);
+      opts.sqlite_db_file = os.path.abspath(opts.db);
     else:
-      print >> sys.stderr, "Warning: --db %s does not exist, falling back to conf file.." % str(opts.db);
+      die("Error: --db %s does not exist!" % str(opts.db));
   else:
-    globals()['SQLITE_DB'] = SQLITE_DB[opts.build]; # read from conf file
+    opts.sqlite_db_file = find_relative(conf.SQLITE_DB[opts.build]); # read from conf file
+    if not os.path.isfile(opts.sqlite_db_file):
+      die("Error: could not locate sqlite database, tried: %s, check your conf file" % str(opts.sqlite_db_file));
+
+  # SNP position looker-upper. 
+  find_pos = PosLookup(opts.sqlite_db_file);
 
   # If a temporary directory was specified, it better exist!
   if opts.rundir:
@@ -852,19 +885,19 @@ def getSettings():
     opts.pop = opts.pop.upper(); # populations are always upper-case
 
     # Check to see if the population, LD source, and build supplied are compatible.
-    info_geno = getLDInfo(opts.pop,opts.source,opts.build,LD_DB);
+    info_geno = getLDInfo(opts.pop,opts.source,opts.build,conf.LD_DB);
     if info_geno == None:
       print >> sys.stderr, "Error: source %s, population %s, and build %s are not jointly supported." % (
         opts.source,opts.pop,opts.build);
       print >> sys.stderr, "See below for supported combinations.";
       print >> sys.stderr, "";
-      printSupportedTrios(LD_DB,PRECOMP_LD_DB);
+      printSupportedTrios(conf.LD_DB);
       sys.exit(1);
 
   # Change refSNP into a chr:pos SNP. 
   if opts.refsnp:
     opts.refsnp = SNP(snp=opts.refsnp);
-    opts.refsnp.tsnp = transSNP(opts.refsnp.snp);
+    opts.refsnp.tsnp = transSNP(opts.refsnp.snp,opts.sqlite_db_file);
     (chr,pos) = find_pos(opts.refsnp.tsnp);
   
     if chr == None or pos == None:
@@ -899,10 +932,10 @@ def getSettings():
       opts.snplist.append( (opts.refsnp,chr,pos-def_flank,pos+def_flank) );
       
   elif opts.hitspec:
-    opts.snplist = readWhitespaceHitList(opts.hitspec,opts.build);
+    opts.snplist = readWhitespaceHitList(opts.hitspec,opts.sqlite_db_file);
   
   elif opts.refgene:
-    refgene_info = findGeneInfo(opts.refgene,opts.build);
+    refgene_info = findGeneInfo(opts.refgene,opts.sqlite_db_file);
     if refgene_info == None:
       die("Error: gene selected for plotting was not found in refFlat.");
 
@@ -985,11 +1018,13 @@ def decompGZFile(file,out):
     out.close();
 
 def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbose):
-  ld_info = getLDInfo(pop,source,build,LD_DB);
+  conf = getConf();
+  
+  ld_info = getLDInfo(pop,source,build,conf.LD_DB);
   settings = FugueSettings(
     ld_info['map_dir'],
     ld_info['ped_dir'],
-    NEWFUGUE_PATH
+    conf.NEWFUGUE_PATH
   );
 
   if cache_file != None:
@@ -1024,7 +1059,7 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
 # -- return None if refsnp is not ever seen
 # -- translates SNP names into chr:pos format
 # Returns filename of fixed LD file, or None if a failure occurred
-def fixUserLD(file,refsnp):
+def fixUserLD(file,refsnp,db_file):
   # Create temporary file to write LD to.
   out = "temp_user_ld_" + tempfile.mktemp(dir="");
   
@@ -1045,6 +1080,8 @@ def fixUserLD(file,refsnp):
     except:
       print >> sys.stderr, "Error: user-supplied LD file does not have column '%s' in header (or no header row exists.)" % column;
       return None;
+  
+  find_pos = PosLookup(db_file);
   
   out_file = open(out,"w");
   print >> out_file, h;
@@ -1113,12 +1150,8 @@ def runQuery(query,args):
 
   return file;
 
-def runQueries(chr,start,stop,snpset,build):
+def runQueries(chr,start,stop,snpset,build,db_file):
   results = {};
-  
-  db_file = find_relative(SQLITE_DB);
-  if db_file == None or not os.path.isfile(db_file):
-    die("Error: could not locate SQLite database file: %s. Check conf file setting SQLITE_DB." % db_file);
   
   db = sqlite3.connect(db_file);
   
@@ -1129,7 +1162,11 @@ def runQueries(chr,start,stop,snpset,build):
   
   return results;
 
-def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
+def runAll(metal_file,refsnp,chr,start,end,opts,args):
+  build = opts.build;
+  delim = opts.delim;
+  no_clean = opts.no_clean;
+  
   print "Beginning plotting sequence for: %s" % str(refsnp);
   print "Extracting region of interest from metal file..";
   (bPocull,metal_temp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,build,delim);
@@ -1157,8 +1194,10 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
 
   # If a gene was passed in, we need to tell M2Z it is a required gene to plot. 
   if not isSNP(refsnp):
-    if findGeneInfo(refsnp,build) != None:
+    if findGeneInfo(refsnp,opts.sqlite_db_file) != None:
       args += " requiredGene=\"%s\"" % str(refsnp);
+
+  find_pos = PosLookup(opts.sqlite_db_file);
 
   # If something other than a SNP was passed in, we need to find 
   # the best SNP in the region. 
@@ -1188,7 +1227,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
     # Did the user supply an LD file? If so, we don't need to calculate it.
     if opts.ld:
       print "Using user-specified LD file..";
-      opts.ld = fixUserLD(opts.ld,refsnp);
+      opts.ld = fixUserLD(opts.ld,refsnp,opts.sqlite_db_file);
       if opts.ld == None:
         return; # hack.. but this whole script is a giant hack anyway. 
     else:
@@ -1202,7 +1241,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
 
   pqueries = {};
   print "Grabbing annotations from SQLite database..";
-  pqueries = runQueries(chr,start,end,opts.snpset,build);
+  pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file);
   for m2zarg,file in pqueries.iteritems():
     if file != None:
       args += " %s=%s" % (m2zarg,file);
@@ -1211,7 +1250,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
   
   print "Creating plot..";
   ld_file = opts.ld if opts.ld != None else ld_temp;
-  runM2Z(metal_temp,ld_file,refsnp,chr,start,end,opts.verbose,args);
+  runM2Z(metal_temp,opts.metal2zoom_path,ld_file,refsnp,chr,start,end,opts.verbose,args);
 
   if not no_clean:
     print "Deleting temporary files.."
@@ -1220,22 +1259,18 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args,no_clean,build,delim):
 
 def main():
   printHeader(M2ZFAST_TITLE);
-  
-  global METAL2ZOOM_PATH;
-  global NEWFUGUE_PATH;
-  
-  # Check constants.
-  METAL2ZOOM_PATH = find_systematic(METAL2ZOOM_PATH);
-  if METAL2ZOOM_PATH == None:
-    die("Could not find locuszoom.R.");
-
-  NEWFUGUE_PATH = find_systematic(NEWFUGUE_PATH);
-  if NEWFUGUE_PATH == None:
-    die("Could not find new_fugue.");
+  conf = getConf();
 
   # Get command-line arguments and parse them for errors.
   print "Loading settings..";
   opts,args = getSettings();
+  
+  # Check new_fugue path. 
+  conf.NEWFUGUE_PATH = find_systematic(conf.NEWFUGUE_PATH);
+  if conf.NEWFUGUE_PATH == None:
+    die("Could not find new_fugue.");
+  
+  # Print important options. 
   print "Options in effect are:\n";
   printOpts(opts);
   print "";
@@ -1243,8 +1278,8 @@ def main():
     print "Plotting parameters in effect are:\n";
     printArgs(args);
     print "";
-  print "Using %s.." % METAL2ZOOM_PATH;
-  print "Using %s.." % NEWFUGUE_PATH;
+  print "Using %s.." % opts.metal2zoom_path;
+  print "Using %s.." % conf.NEWFUGUE_PATH;
 
   # Metal2zoom arguments must be quoted to work properly on the command line.
   # i.e. title="Plot title"
@@ -1270,7 +1305,7 @@ def main():
     # entry[1] - chr
     # entry[2] - start plotting position
     # entry[3] - end plotting position
-    # entry[4] - metal2zoom args specified in hitspec file, if one was used
+    # entry[4] - locuszoom.R args specified in hitspec file, if one was used
     # all of these are computed in getSettings()
     for entry in opts.snplist:
       # Time the code.
@@ -1307,12 +1342,12 @@ def main():
       os.mkdir(temp_dir);
 
       # Change into our temporary directory. This is where files will be generated
-      # while creating the plot. metal2zoom.R, new_fugue, and m2zfast will all
+      # while creating the plot. locuszoom.R, new_fugue, and m2zfast will all
       # create files here. 
       os.chdir(temp_dir);
 
       # Create the plot. This runs through the whole sequence of fetching LD and running M2Z.
-      runAll(opts.metal,entry[0],entry[1],entry[2],entry[3],opts,iter_args,opts.no_clean,build=opts.build,delim=opts.delim);
+      runAll(opts.metal,entry[0],entry[1],entry[2],entry[3],opts,iter_args);
 
       # Change back up to the parent directory where we started running from. 
       os.chdir("..");

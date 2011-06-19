@@ -23,6 +23,14 @@ import decimal
 import fnmatch
 from which import which_files
 
+def singleton(cls):
+    instances = {}
+    def getinstance():
+        if cls not in instances:
+            instances[cls] = cls()
+        return instances[cls]
+    return getinstance
+
 def find_relative(file):
   full_path = None;
   
