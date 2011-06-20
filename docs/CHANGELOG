@@ -1,3 +1,27 @@
+1.1:
+----
+
+Bug fixes: 
+-- hitspec with blank lines would cause crash 
+-- hitspec with alternative line endings (unix, windows, etc.) would cause crash
+-- hitspec without proper number of columns would crash, proper warning now issued
+-- if a SNP's position could not be found when processing hitspec file, program would crash instead of skipping it
+-- program would crash if sqlite was not available, now issues proper warning
+-- genes would not be displayed at all in the event that all genes in region could not be fit into track below plot
+-- if a reference SNP was given as chr:pos but existed in LD files as rs# (or vice versa), plot would be entirely gray 
+-- better support for 1000G SNPs (all SNPs are converted to chr/pos internally as a result) 
+-- SNPs in hitspec file that were from an earlier genome build were not being translated into the current genome build (instead, it would complain about not finding a position) 
+-- users running R 2.13.0 would get a crash regarding a missing library include
+
+Features added: 
+-- support for hg19 (for 1000G populations, hapmap will no longer be provided)
+-- support for metabochip LD 
+
+Features removed: 
+-- removed the --hits option, this was no longer used and is superseded by --hitspec
+-- removed support for pre-computed LD (this was not being maintained, bloated the code, and often was a "cache miss") 
+-- (CSG internal version) removed SQL database connections, now runs entirely from sqlite database
+
 1.0.3:
 ------
 -- fixed bug where metal files with p-values only within the range [0.1,1] were double -log10 transformed
