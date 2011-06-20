@@ -16,6 +16,7 @@ Bug fixes:
 Features added: 
 -- support for hg19 (for 1000G populations, hapmap will no longer be provided)
 -- support for metabochip LD 
+-- added --no-ld option, will force locuszoom to skip calculating LD
 
 Features removed: 
 -- removed the --hits option, this was no longer used and is superseded by --hitspec
