@@ -83,7 +83,6 @@ _DEBUG = False;
 # Fix path of script to be absolute.
 sys.argv[0] = os.path.abspath(sys.argv[0]);
 
-@singleton
 class Conf(object):
   def __init__(self,conf_file):
     self._load(conf_file);
@@ -96,7 +95,9 @@ class Conf(object):
       exec "self.%s = v" % str(k);
 
 def getConf(conf_file=M2ZFAST_CONF):
-  return Conf(conf_file);
+  conf_file = find_relative(conf_file);
+  conf = Conf(conf_file);
+  return conf;
 
 # Get LD file information given parameters.
 # Returns a dictionary with 4 elements:
@@ -158,6 +159,13 @@ def isSNP(string):
   else:
     return False;
 
+def isRSID(string):
+  p = re.compile(r"^rs(\d+?)$");
+  if p.search(string) != None:
+    return True;
+  else:
+    return False;
+
 # Parse a 1000G SNP into chromosome/position.
 # Example: chr4:172274 --> (4,172274)
 def parse1000G(snp):
@@ -214,9 +222,12 @@ def timeString(seconds):
   return string;
 
 def transSNP(snp,db_file):
-  con = sqlite3.connect(db_file);
+  # If this isn't a rs# SNP, it has no translation. 
+  if not isRSID(snp):
+    return snp;
 
-  cur = con.execute("SELECT * FROM %s where rs_orig='%s'" % (conf.SQLITE_TRANS,snp));
+  con = sqlite3.connect(db_file);
+  cur = con.execute("SELECT * FROM %s where rs_orig='%s'" % (SQLITE_TRANS,snp));
 
   new_name = None;
   while 1:
@@ -789,6 +800,10 @@ def getSettings():
     else:
       print "locuszoom.R override specified, but path \'%s\' does not exist - using default." % opts.m2zpath;
       print "Current directory is: %s" % os.getcwd();
+  else:
+    opts.metal2zoom_path = find_relative(conf.METAL2ZOOM_PATH);
+    if not os.path.isfile(opts.metal2zoom_path):
+      die("Error: could not find locuszoom.R - check conf file %s" % M2ZFAST_CONF);
 
   # Are we running in experimental mode?
   if opts.exper:
@@ -814,11 +829,16 @@ def getSettings():
     if not os.path.isdir(opts.rundir):
       die("Error: temporary directory %s does not exist, you must create it first." % str(opts.tempdir));
 
-  # Check to see if --hits and --refsnp were specified together. This shouldn't happen.
+  # Check to see if --hitspec and --refsnp were specified together. This shouldn't happen.
   mode_count = sum(map(lambda x: x != None,[opts.hitspec,opts.refsnp]));
   if mode_count > 1:
     die_help("Must specify either --refsnp or --hitspec. These options are mutually exclusive.",parser);
 
+  # Check to see if --hitspec and --refgene were specified together. This shouldn't happen.
+  mode_count = sum(map(lambda x: x != None,[opts.hitspec,opts.refgene]));
+  if mode_count > 1:
+    die_help("Must specify either --refgene or --hitspec. These options are mutually exclusive.",parser);
+  
   # Check metal file for existence.
   if not opts.metal:
     die("Must supply --metal <file>.");
@@ -828,6 +848,10 @@ def getSettings():
       die("Error: could not find metal file %s" % opts.metal);
     else:
       opts.metal = os.path.abspath(metal_test);
+
+  # Check metal file size. 
+  if os.path.getsize(opts.metal) <= 0:
+    die("Error: metal file is empty: %s" % str(opts.metal));
 
   # Fix delimiter.
   if opts.delim in ("tab","\\t","\t"):
@@ -848,7 +872,7 @@ def getSettings():
   elif opts.hitspec:
     opts.hitspec = find_systematic(opts.hitspec);
     if opts.hitspec == None:
-      die("Error: could not find hitspec file, tried: %s" % opts.hitspec);
+      die("Error: hitspec file does not exist.");
 
   # Check that multithread count is less than maximum allowed.
   if opts.multi > MULTI_CAP:
@@ -963,10 +987,9 @@ def getSettings():
     ))
   
   else:
-    die("You must specify one of these options: \n"
+    die("Error: you must specify one of these options: \n"
         "--refsnp\n"
         "--refgene\n"
-        "--hits\n"
         "--hitspec\n"
         "--chr, --start, and --end together\n"
     );
@@ -1073,10 +1096,11 @@ def fixUserLD(file,refsnp,db_file):
   
   # Checks on LD file format. 
   h = f.readline().lower().rstrip();
+  h_s = h.split();
   
   for column in ('snp1','snp2','dprime','rsquare'):
     try:
-      exec "%s_col = h.index(column)" % column;
+      exec "%s_col = h_s.index(column)" % column;
     except:
       print >> sys.stderr, "Error: user-supplied LD file does not have column '%s' in header (or no header row exists.)" % column;
       return None;
@@ -1086,10 +1110,10 @@ def fixUserLD(file,refsnp,db_file):
   out_file = open(out,"w");
   print >> out_file, h;
   for line in f:
-    e = line.strip();
+    e = line.rstrip().split();
     
     # If the line contains the refsnp, extract it. 
-    if e.find(refsnp) != -1:
+    if line.find(refsnp.snp) != -1:
       found_refsnp = True;
       
       skip = False;
@@ -1103,7 +1127,7 @@ def fixUserLD(file,refsnp,db_file):
           skip = True;
           
       if not skip:
-        print >> out_file, e;
+        print >> out_file, " ".join(e);
   
   f.close();
   out_file.close();
@@ -1169,7 +1193,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   
   print "Beginning plotting sequence for: %s" % str(refsnp);
   print "Extracting region of interest from metal file..";
-  (bPocull,metal_temp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,build,delim);
+  (bPocull,metal_temp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
   ld_temp = None;
   
   # If poculling does not give us any SNPs in the region, we're done. 
@@ -1207,7 +1231,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
     print "Found: %s" % best_snp;  
     
     refsnp = SNP(snp=best_snp);
-    refsnp.tsnp = transSNP(best_snp);
+    refsnp.tsnp = transSNP(best_snp,opts.sqlite_db_file);
     (best_chr,best_pos) = find_pos(refsnp.tsnp);
     refsnp.chr = best_chr;
     refsnp.pos = best_pos;
