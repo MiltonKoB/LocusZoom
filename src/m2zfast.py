@@ -431,6 +431,7 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
   format_str = "\t".join(["%i","%i"] + ["%s" for i in xrange(len(metal_header))]);
   
   found_in_region = False;
+  found_chrpos = False;
   for line in f:
     # Skip blank lines. 
     if line.rstrip() == "":
@@ -442,6 +443,7 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
     # Is this a 1000G SNP? If so, we can pull the position from it.
     gcheck = parse1000G(snp);
     if gcheck:
+      found_chrpos = True;
       gchr = gcheck[0];
       gpos = gcheck[1];
       
@@ -467,6 +469,14 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
 
   f.close();
   out.close();
+  
+  if found_chrpos:
+    print >> sys.stderr, "";
+    print >> sys.stderr, fill("WARNING: your association results file has both rsID and "
+                          "chr:pos SNP names. Please make sure you have selected the "
+                          "correct genome build by using the --build parameter, or by "
+                          "selecting the appropriate build on the website.");
+    print >> sys.stderr, "";
 
   return (found_in_region,output_file);
 

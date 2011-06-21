@@ -17,6 +17,7 @@ Features added:
 -- support for hg19 (for 1000G populations, hapmap will no longer be provided)
 -- support for metabochip LD 
 -- added --no-ld option, will force locuszoom to skip calculating LD
+-- added a warning when metal file contains both rsID and chr:pos SNP names to make sure user selects proper genome build
 
 Features removed: 
 -- removed the --hits option, this was no longer used and is superseded by --hitspec
