@@ -41,7 +41,8 @@ which = imp.load_source(
 LOG_NAME = "locuszoom.dbmeister";
 
 # Config constants. 
-execfile(os.path.join(os.path.dirname(sys.argv[0]),"../conf/m2zfast.conf"));
+sys.path.insert(0,os.path.join(os.path.dirname(sys.argv[0]),"../src/"));
+from m2zfast import *
 
 def die(msg):
   print >> sys.stderr, msg;

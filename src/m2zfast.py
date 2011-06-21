@@ -55,7 +55,7 @@ except:
 # Program strings.
 M2ZFAST_VERSION = "1.1";
 M2ZFAST_TITLE = "+---------------------------------------------+\n"\
-                "| LocusZoom 1.1                               |\n"\
+                "| LocusZoom 1.1 (06/20/2011)                  |\n"\
                 "| Plot regional association results           |\n"\
                 "| from GWA scans or candidate gene studies    |\n"\
                 "+---------------------------------------------+\n";
@@ -905,18 +905,19 @@ def getSettings():
     if opts.ld == None or not os.path.isfile(opts.ld):
       die("Error: user-specified LD file does not exist.\nFile was: %s " % opts.ld)
   else:
-    # Fix up population/build/source settings before checking.
-    opts.pop = opts.pop.upper(); # populations are always upper-case
+    if not opts.no_ld:
+      # Fix up population/build/source settings before checking.
+      opts.pop = opts.pop.upper(); # populations are always upper-case
 
-    # Check to see if the population, LD source, and build supplied are compatible.
-    info_geno = getLDInfo(opts.pop,opts.source,opts.build,conf.LD_DB);
-    if info_geno == None:
-      print >> sys.stderr, "Error: source %s, population %s, and build %s are not jointly supported." % (
-        opts.source,opts.pop,opts.build);
-      print >> sys.stderr, "See below for supported combinations.";
-      print >> sys.stderr, "";
-      printSupportedTrios(conf.LD_DB);
-      sys.exit(1);
+      # Check to see if the population, LD source, and build supplied are compatible.
+      info_geno = getLDInfo(opts.pop,opts.source,opts.build,conf.LD_DB);
+      if info_geno == None:
+        print >> sys.stderr, "Error: source %s, population %s, and build %s are not jointly supported." % (
+          opts.source,opts.pop,opts.build);
+        print >> sys.stderr, "See below for supported combinations.";
+        print >> sys.stderr, "";
+        printSupportedTrios(conf.LD_DB);
+        sys.exit(1);
 
   # Change refSNP into a chr:pos SNP. 
   if opts.refsnp:
