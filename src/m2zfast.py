@@ -33,6 +33,7 @@ from optparse import OptionParser, SUPPRESS_HELP
 from subprocess import *
 from shutil import move,rmtree
 from prettytable import *
+from textwrap import fill
 
 # Try importing modules that may not exist on a user's machine. 
 try:
