@@ -385,7 +385,7 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
   # Open file for reading. Attempt to determine if file is compressed before opening. 
   if is_gzip(metal_file):
     try:
-      f = gzip.open(metal_file,"rU"); # throws exception if gz not on system
+      f = gzip.open(metal_file); # throws exception if gz not on system
     except:
       die("Error: gzip is not supported on your system, cannot read --metal file.");
   elif is_bz2(metal_file):
