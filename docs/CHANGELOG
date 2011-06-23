@@ -12,6 +12,7 @@ Bug fixes:
 -- better support for 1000G SNPs (all SNPs are converted to chr/pos internally as a result) 
 -- SNPs in hitspec file that were from an earlier genome build were not being translated into the current genome build (instead, it would complain about not finding a position) 
 -- users running R 2.13.0 would get a crash regarding a missing library include
+-- fixed issue where some gzipped files would cause a crash 
 
 Features added: 
 -- support for hg19 (for 1000G populations, hapmap will no longer be provided)
