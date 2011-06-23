@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 import sys
 
+#===============================================================================
+# DEPRECATED / NO LONGER IN USE
+# Python 2.6.x bugfix release fixed issue with gzip.open(..,"rU")
+#===============================================================================
+
 try:
   import gzip
   

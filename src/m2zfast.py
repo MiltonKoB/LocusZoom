@@ -33,7 +33,6 @@ from optparse import OptionParser, SUPPRESS_HELP
 from subprocess import *
 from shutil import move,rmtree
 from prettytable import *
-from gz_read import gz_univ_readline
 
 # Try importing modules that may not exist on a user's machine. 
 try:
@@ -385,12 +384,15 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
 
   # Open file for reading. Attempt to determine if file is compressed before opening. 
   if is_gzip(metal_file):
-    f = gz_univ_readline(metal_file); # throws exception if gz not on system
+    try:
+      f = gzip.open(metal_file,"rU"); # throws exception if gz not on system
+    except:
+      die("Error: gzip is not supported on your system, cannot read --metal file.");
   elif is_bz2(metal_file):
     try:
       f = bz2.BZ2File(metal_file,"rU");
     except NameError:
-      die("Error: bz2 is not supported on your system.");
+      die("Error: bz2 is not supported on your system, cannot read --metal file.");
   else:
     f = open(metal_file,"rU");
 
