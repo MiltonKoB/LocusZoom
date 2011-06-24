@@ -795,6 +795,7 @@ def getSettings():
   parser.add_option("-e","--experimental",dest="exper",action="store_true",help=SUPPRESS_HELP);
   parser.add_option("--override-m2z",dest="m2zpath",help=SUPPRESS_HELP);
   parser.add_option("--db",type="string",help="SQLite database file. This overrides the conf file.");
+  parser.add_option("--offline",dest="offline",action="store_true",default=False,help=SUPPRESS_HELP);
 
   # Defaults.
   parser.set_defaults(
@@ -1043,6 +1044,10 @@ def getSettings():
 
   if opts.pvalcol != None:
     args.append("pvalCol=%s" % opts.pvalcol);
+
+  # Print warnings about deprecated options. 
+  if opts.offline:
+    print >> sys.stderr, "Warning: --offline no longer required, option will be ignored..";
 
   return (opts,args);
 
