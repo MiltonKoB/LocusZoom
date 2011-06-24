@@ -537,6 +537,14 @@ def die_help(msg,parser):
   parser.print_help();
   sys.exit(1);
 
+def safe_int(x):
+  try:
+    x = int(x);
+  except:
+    x = None;
+
+  return x;
+
 # Reads a "hitspec" or batch run configuration file. 
 # The file has 6 columns: 
 # 0 - snp or gene
@@ -571,6 +579,7 @@ def readWhitespaceHitList(file,db_file):
   for line in f:
     # Skip blank lines. 
     if line.strip() == "":
+      print >> sys.stderr, "Warning: skipping blank line in hitspec file..";
       continue;
 
     e = line.split();
@@ -581,6 +590,7 @@ def readWhitespaceHitList(file,db_file):
       continue;
 
     if e[5] == 'no'or e[5] == "":
+      print >> sys.stderr, "Skipping disabled line '%s' in hitspec file.." % " ".join(e);
       continue;
 
     snp = e[0];
@@ -596,17 +606,18 @@ def readWhitespaceHitList(file,db_file):
     if flank != "" and flank != "NA":
       flank = convertFlank(flank);
       if flank == None:
-        die("Error: could not parse flank \"%s\", format incorrect." % e[flank_col]);
+        die("Error: could not parse flank \"%s\", format incorrect." % e[4]);
 
+    if isSNP(snp):
+      snp = SNP(snp=snp);
+      snp.tsnp = transSNP(snp.snp,db_file);
+      (snp.chr,snp.pos) = find_pos(snp.tsnp);
+      snp.chrpos = "chr%s:%s" % (snp.chr,snp.pos);
+        
     if flank != None and flank != "NA":
       if isSNP(snp):
-        snp = SNP(snp=snp);
-        snp.tsnp = transSNP(snp.snp,db_file);
-        (fchr,fpos) = find_pos(snp.tsnp);
-        snp.chr = fchr;
-        snp.pos = fpos;
-        snp.chrpos = "chr%s:%s" % (fchr,fpos);
-        
+        fchr = snp.chr;
+        fpos = snp.pos;
         try:
           chr = int(fchr);
           start = fpos - flank;
@@ -642,10 +653,18 @@ def readWhitespaceHitList(file,db_file):
     else:
       try:
         chr = int(chr);
+      except:
+        if isSNP(snp):
+          chr = snp.chr;
+        else:
+          print >> sys.stderr, "Error: invalid chr/start/end in hitspec file, no chrom given, line was: '%s'" % " ".join(e);
+          continue;
+
+      try:
         start = long(start);
         end = long(end);
       except:
-        print >> sys.stderr, "Error: invalid chr/start/end in hitspec file."
+        print >> sys.stderr, "Error: invalid start/end in hitspec file, line was: '%s'" % " ".join(e);
         continue;
       
       # If something wasn't given in the SNP/gene column, need a placeholder.
