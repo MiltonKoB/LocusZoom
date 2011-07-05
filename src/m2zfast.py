@@ -398,7 +398,9 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
     f = open(metal_file,"rU");
 
   # Find snp column.
-  metal_header = f.next().rstrip().split(delim);
+  metal_header = f.next().split(delim);
+  metal_header[-1] = metal_header[-1].rstrip();
+
   snp_col = None; 
   if snp_column != None:
     if type(snp_column) == type(str()):
@@ -440,7 +442,9 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
     if line.rstrip() == "":
       continue;
     
-    e = line.rstrip().split(delim);
+    e = line.split(delim);
+    e[-1] = e[-1].rstrip();
+
     snp = e[snp_col];
 
     # Is this a 1000G SNP? If so, we can pull the position from it.
