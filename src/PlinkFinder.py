@@ -44,10 +44,7 @@ class PlinkSettings:
     self.plink_path = plink_path;
 
   def createLDCacheKey(self):
-    key_string = \
-      self.map_dir + \
-      self.ped_dir;
-
+    key_string = self.bim_path;
     key = hashlib.sha512(key_string).hexdigest();
     return key;
 
