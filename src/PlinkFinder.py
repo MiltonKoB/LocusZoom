@@ -25,6 +25,7 @@ import hashlib
 import pdb
 from LDRegionCache import *
 from m2zutils import *
+from textwrap import fill
 
 class PlinkSettings:
   def __init__(self,bim_path,plink_path):
@@ -129,10 +130,10 @@ class PlinkFinder():
       if self.cache.hasRegion(snp,start,stop):
         self.data = self.cache.getAllLD(snp);
       else:
-        self.data = self._runsequence(snp,chr,start,stop)
+        self.data = self._run_sequence();
         self.cache.updateLD(snp,start,stop,self.data);
     else:
-      self.data = self._runsequence(snp,chr,start,stop);
+      self.data = self._run_sequence();
 
     # Complete successfully?
     if self.data == None or len(self.data) == 0:
@@ -165,7 +166,7 @@ class PlinkFinder():
     # Fix chromosome name for looking up file. 
     chrom = chr2chrom(self.chr);
 
-    bfile_path = os.path.join(self.settings.bim_path,chrom);
+    bfile_path = os.path.join(self.settings.bim_path,"chr" + chrom);
 
     com = "%s --bfile %s --chr %s --from-bp %s --to-bp %s --ld-snp %s --r2 --ld-window-r2 0 --ld-window 999999 --ld-window-kb 99999" % (
       self.settings.plink_path,
