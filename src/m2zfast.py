@@ -1085,7 +1085,10 @@ def decompGZFile(file,out):
 
 def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbose):
   conf = getConf();
-  
+ 
+  conf.NEWFUGUE_PATH = find_systematic(conf.NEWFUGUE_PATH);
+  conf.PLINK_PATH = find_systematic(conf.PLINK_PATH);
+ 
   ld_info = getLDInfo(pop,source,build,conf.LD_DB);
   if 'map_dir' in ld_info:
     settings = FugueSettings(
@@ -1104,10 +1107,14 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
   # Check that LD program exists. 
   if isinstance(settings,FugueSettings):
     if not os.path.exists(conf.NEWFUGUE_PATH):
-      die("Error: could not find %s for computing LD.." % conf.NEWFUGUE_PATH);
+      raise Exception, "Error: could not find %s for computing LD.." % conf.NEWFUGUE_PATH;
+    else:
+      print "Using %s to compute LD.." % conf.NEWFUGUE_PATH;
   elif isinstance(settings,PlinkSettings):
     if not os.path.exists(conf.PLINK_PATH):
-      die("Error: could not find %s for computing LD.." % conf.PLINK_PATH);
+      raise Exception, "Error: could not find %s for computing LD.." % conf.PLINK_PATH;
+    else:
+      print "Using %s to compute LD.." % conf.PLINK_PATH;
 
   if cache_file != None:
     cache = LDRegionCache(settings.createLDCacheKey(),cache_file);
@@ -1319,7 +1326,6 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
     else:
       print "Finding pairwise LD with %s.." % str(refsnp);
       print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
-      print "Computing LD using new_fugue.."
       ld_temp = computeLD(metal,refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
   else:
     print "Skipping LD computations, --no-ld was given..";
@@ -1351,10 +1357,6 @@ def main():
   print "Loading settings..";
   opts,args = getSettings();
   
-  # Check LD program paths. 
-  conf.NEWFUGUE_PATH = find_systematic(conf.NEWFUGUE_PATH);
-  conf.PLINK_PATH = find_systematic(conf.PLINK_PATH);
-
   # Print important options. 
   print "Options in effect are:\n";
   printOpts(opts);
@@ -1364,8 +1366,6 @@ def main():
     printArgs(args);
     print "";
   print "Using %s.." % opts.metal2zoom_path;
-  print "Using %s.." % conf.NEWFUGUE_PATH;
-  print "Using %s.." % conf.PLINK_PATH;
 
   # Metal2zoom arguments must be quoted to work properly on the command line.
   # i.e. title="Plot title"
