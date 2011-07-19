@@ -26,6 +26,7 @@ import platform
 from m2zutils import *
 from MetalFile import *
 from FugueFinder import *
+from PlinkFinder import *
 from LDRegionCache import *
 from pquery import *
 from glob import glob
@@ -808,16 +809,16 @@ def getSettings():
     no_clean = False,
     no_ld = False,
     no_transform = False,
-    build = conf.LATEST_BUILD,
+    build = conf.DEFAULT_BUILD,
     plotonly = False,
     prefix = None,
     pvalcol = "P-value",
     snpcol = "MarkerName", 
     verbose = False,
-    pop = "CEU",
+    pop = conf.DEFAULT_POP,
     snpset = "Illu1M",
     rundir = ".",
-    source = "hapmap",
+    source = conf.DEFAULT_SOURCE,
     experimental = False,
     cache = "../ld_cache.db",
   );
@@ -1086,18 +1087,29 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
   conf = getConf();
   
   ld_info = getLDInfo(pop,source,build,conf.LD_DB);
-  settings = FugueSettings(
-    ld_info['map_dir'],
-    ld_info['ped_dir'],
-    conf.NEWFUGUE_PATH
-  );
+  if 'map_dir' in ld_info:
+    settings = FugueSettings(
+      ld_info['map_dir'],
+      ld_info['ped_dir'],
+      conf.NEWFUGUE_PATH
+    );
+  elif 'bim_dir' in ld_info:
+    settings = PlinkSettings(
+      ld_info['bim_dir'],
+      conf.PLINK_PATH
+    );
+  else:
+    raise Exception, "Error: conf file specification for %s/%s/%s is invalid, please check syntax." % (pop,source,build);
 
   if cache_file != None:
     cache = LDRegionCache(settings.createLDCacheKey(),cache_file);
   else:
     cache = None;
-    
-  ld_finder = FugueFinder(settings,cache,fugue_cleanup,verbose);
+  
+  if isinstance(settings,FugueSettings): 
+    ld_finder = FugueFinder(settings,cache,fugue_cleanup,verbose);
+  elif isinstance(settings,PlinkSettings):
+    ld_finder = PlinkFinder(settings,cache,fugue_cleanup,verbose);
 
   ld_success = ld_finder.compute(snp.chrpos,chr,start,end);
   if ld_success:
@@ -1313,7 +1325,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       args += " %s=%s" % (m2zarg,file);
     else:
       args += " %s=NULL" % m2zarg;
-  
+
   print "Creating plot..";
   ld_file = opts.ld if opts.ld != None else ld_temp;
   runM2Z(metal_temp,opts.metal2zoom_path,ld_file,refsnp,chr,start,end,opts.verbose,args);
@@ -1346,6 +1358,7 @@ def main():
     print "";
   print "Using %s.." % opts.metal2zoom_path;
   print "Using %s.." % conf.NEWFUGUE_PATH;
+  print "Using %s.." % conf.PLINK_PATH;
 
   # Metal2zoom arguments must be quoted to work properly on the command line.
   # i.e. title="Plot title"
