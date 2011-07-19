@@ -1101,6 +1101,14 @@ def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,
   else:
     raise Exception, "Error: conf file specification for %s/%s/%s is invalid, please check syntax." % (pop,source,build);
 
+  # Check that LD program exists. 
+  if isinstance(settings,FugueSettings):
+    if not os.path.exists(conf.NEWFUGUE_PATH):
+      die("Error: could not find %s for computing LD.." % conf.NEWFUGUE_PATH);
+  elif isinstance(settings,PlinkSettings):
+    if not os.path.exists(conf.PLINK_PATH):
+      die("Error: could not find %s for computing LD.." % conf.PLINK_PATH);
+
   if cache_file != None:
     cache = LDRegionCache(settings.createLDCacheKey(),cache_file);
   else:
@@ -1343,11 +1351,10 @@ def main():
   print "Loading settings..";
   opts,args = getSettings();
   
-  # Check new_fugue path. 
+  # Check LD program paths. 
   conf.NEWFUGUE_PATH = find_systematic(conf.NEWFUGUE_PATH);
-  if conf.NEWFUGUE_PATH == None:
-    die("Could not find new_fugue.");
-  
+  conf.PLINK_PATH = find_systematic(conf.PLINK_PATH);
+
   # Print important options. 
   print "Options in effect are:\n";
   printOpts(opts);
