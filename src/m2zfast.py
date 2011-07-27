@@ -19,6 +19,15 @@
 
 import os
 import sys
+
+# Fix path of script to be absolute.
+sys.argv[0] = os.path.abspath(sys.argv[0]);
+
+# Add the locuszoom bin/ to the PATH. 
+LZ_ROOT = os.path.dirname(sys.argv[0]);
+LZ_BIN = os.path.join(LZ_ROOT,"bin");
+os.environ['PATH'] = LZ_BIN + os.pathsep + os.environ['PATH'];
+
 import time
 import re
 import tempfile
@@ -80,9 +89,6 @@ SQLITE_TRANS = "refsnp_trans";
 
 # Debug flag. Makes all output "more verbose."
 _DEBUG = False;
-
-# Fix path of script to be absolute.
-sys.argv[0] = os.path.abspath(sys.argv[0]);
 
 class Conf(object):
   def __init__(self,conf_file):
@@ -839,7 +845,7 @@ def getSettings():
       print "locuszoom.R override specified, but path \'%s\' does not exist - using default." % opts.m2zpath;
       print "Current directory is: %s" % os.getcwd();
   else:
-    opts.metal2zoom_path = find_relative(conf.METAL2ZOOM_PATH);
+    opts.metal2zoom_path = find_systematic(conf.METAL2ZOOM_PATH);
     if not os.path.isfile(opts.metal2zoom_path):
       die("Error: could not find locuszoom.R - check conf file %s" % M2ZFAST_CONF);
 

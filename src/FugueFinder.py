@@ -240,10 +240,10 @@ class FugueFinder():
     ld_loc = "templd_newfugue_%s" % ref_snp;
 
     # Command to run new_fugue.
+    new_fugue = self.settings.fugue_path;
     if chr == 'X' or chr == 23:
-      new_fugue = "new_fugueX";
-    else:
-      new_fugue = "new_fugue";
+      new_fugue += 'X';
+    
     com = "%s --quiet --diseq --window 99999999999999999 -m %s -d %s -p %s -o %s --names --minrsq 0 --pairWith %s" % (
       new_fugue,
       fixed_map,
