@@ -36,7 +36,6 @@ class FugueSettings:
       
       path = find_systematic(value);
       if path == None or not os.path.exists(path):
-        pdb.set_trace();
         die("Error: could not find %s: %s, check conf file." % (str(arg),str(value)));
       else:
         exec "%s = \"%s\"" % (arg,path);

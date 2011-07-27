@@ -21,7 +21,6 @@ import sys
 import os
 import decimal
 import fnmatch
-from which import which_files
 
 def singleton(cls):
     instances = {}
@@ -30,6 +29,14 @@ def singleton(cls):
             instances[cls] = cls()
         return instances[cls]
     return getinstance
+
+def which(f):
+  for path in os.environ['PATH'].split(os.pathsep):
+    for file in os.listdir(path):
+      if os.path.basename(f) == file:
+        return os.path.join(path,file);
+
+  return None;
 
 def find_relative(file):
   full_path = None;
@@ -80,10 +87,10 @@ def find_systematic(file):
   if relative:
     return relative;
   
-  walk = [i for i in which_files(file)];
-  if len(walk) > 0:
-    return walk[0];
-    
+  whiched_file = which(file);
+  if whiched_file != None:
+    return whiched_file;   
+ 
   return None;
 
 def is_number(x):

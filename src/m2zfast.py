@@ -24,7 +24,7 @@ import sys
 sys.argv[0] = os.path.abspath(sys.argv[0]);
 
 # Add the locuszoom bin/ to the PATH. 
-LZ_ROOT = os.path.dirname(sys.argv[0]);
+LZ_ROOT = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]),".."));
 LZ_BIN = os.path.join(LZ_ROOT,"bin");
 os.environ['PATH'] = LZ_BIN + os.pathsep + os.environ['PATH'];
 
