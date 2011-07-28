@@ -33,7 +33,6 @@ import re
 import tempfile
 import platform
 from m2zutils import *
-from MetalFile import *
 from FugueFinder import *
 from PlinkFinder import *
 from LDRegionCache import *
@@ -444,6 +443,8 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
   
   found_in_region = False;
   found_chrpos = False;
+  min_snp = None;
+  min_pval = decimal.Decimal(1);
   for line in f:
     # Skip blank lines. 
     if line.rstrip() == "":
@@ -470,9 +471,15 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
       # Insert fixed log10 p-value
       pval = e[pval_col];
   
-      if is_number(pval):      
+      if is_number(pval):     
+        dec_pval = decimal.Decimal(pval);
+      
+        if dec_pval < min_pval:
+          min_snp = snp;
+          min_pval = dec_pval; 
+          
         if not no_transform:
-          e[pval_col] = str(-1*decimal.Decimal(pval).log10());
+          e[pval_col] = str(-1*dec_pval.log10());
         
         (schr,spos) = sptable.get(snp);
         e[snp_col] = "chr%i:%i" % (schr,spos);
@@ -492,7 +499,7 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
                           "selecting the appropriate build on the website.");
     print >> sys.stderr, "";
 
-  return (found_in_region,output_file);
+  return (found_in_region,output_file,min_snp);
 
 # Runs the R script which actually generates the plot. 
 def runM2Z(metal,metal2zoom_path,ld_file,refsnp,chr,start,end,verbose,args=""):
@@ -1089,7 +1096,7 @@ def decompGZFile(file,out):
     f.close();
     out.close();
 
-def computeLD(metal,snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbose):
+def computeLD(snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbose):
   conf = getConf();
  
   conf.NEWFUGUE_PATH = find_systematic(conf.NEWFUGUE_PATH);
@@ -1268,7 +1275,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   
   print "Beginning plotting sequence for: %s" % str(refsnp);
   print "Extracting region of interest from metal file..";
-  (bPocull,metal_temp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
+  (bPocull,metal_temp,min_snp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
   ld_temp = None;
   
   # If poculling does not give us any SNPs in the region, we're done. 
@@ -1278,18 +1285,6 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       print "Deleting temporary files.."
       cleanup([ld_temp,metal_temp]);
     return; # hack
-
-  # Read in poculled metal data. 
-  metal = MetalFile();
-  metal.delim = "\t";
-  if not opts.no_trans:
-    metal.logpval = True;
-    metal.use_decimal = True;
-  if opts.snpcol:
-    metal.snpcol = opts.snpcol;
-  if opts.pvalcol:
-    metal.pvalcol = opts.pvalcol;
-  metal.load(metal_temp);
 
   # If a gene was passed in, we need to tell M2Z it is a required gene to plot. 
   if not isSNP(refsnp):
@@ -1302,11 +1297,10 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   # the best SNP in the region. 
   if not isSNP(refsnp):
     print "Attempting to find best SNP in region..";
-    best_snp = metal.getBestSNPInRegion(chr,start,end)[0];
-    print "Found: %s" % best_snp;  
+    print "Found: %s" % min_snp;  
     
-    refsnp = SNP(snp=best_snp);
-    refsnp.tsnp = transSNP(best_snp,opts.sqlite_db_file);
+    refsnp = SNP(snp=min_snp);
+    refsnp.tsnp = transSNP(min_snp,opts.sqlite_db_file);
     (best_chr,best_pos) = find_pos(refsnp.tsnp);
     refsnp.chr = best_chr;
     refsnp.pos = best_pos;
@@ -1332,7 +1326,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
     else:
       print "Finding pairwise LD with %s.." % str(refsnp);
       print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
-      ld_temp = computeLD(metal,refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
+      ld_temp = computeLD(refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
   else:
     print "Skipping LD computations, --no-ld was given..";
     ld_temp = "NULL";
