@@ -1296,7 +1296,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   no_clean = opts.no_clean;
   
   print "Beginning plotting sequence for: %s" % str(refsnp);
-  print "Extracting region of interest from metal file..";
+  print "Extracting region of interest (%s) from metal file.." % regionString(chr,start,end);
   (bPocull,metal_temp,min_snp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
   ld_temp = None;
   
