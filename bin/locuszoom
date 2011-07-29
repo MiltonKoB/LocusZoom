@@ -27,7 +27,8 @@ pyex = sys.executable;
 script_dir = os.path.dirname(os.path.realpath(sys.argv[0]));
 locuszoom = os.path.join(script_dir,"../src/m2zfast.py");
 if os.path.isfile(locuszoom):
-  e = pyex + " -OO " + locuszoom + " " + " ".join(sys.argv[1:]);
+  args = map(lambda x: '"%s"' % x,sys.argv[1:]);
+  e = pyex + " -OO " + locuszoom + " " + " ".join(args);
   os.system(e);
 
 # That apparently failed, so now let's try the environment variable "LOCUSZOOM_PATH". 
