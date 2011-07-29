@@ -988,22 +988,44 @@ def getSettings():
   if opts.refsnp:
     (chr,pos) = (opts.refsnp.chr,opts.refsnp.pos);
 
-    if opts.flank:
-      opts.snplist.append( (opts.refsnp,chr,pos-opts.flank,pos+opts.flank) );
-    elif opts.start and opts.end and opts.chr:
+    if opts.start and opts.end and opts.chr:
       opts.start = long(opts.start);
       opts.end = long(opts.end);
       opts.chr = chrom2chr(chr);
       if opts.chr == chr and opts.start < pos and opts.end > pos:
         opts.snplist.append( (opts.refsnp,chr,opts.start,opts.end) );
       else:
-        print >> sys.stderr, "Warning: skipping SNP %s, genomic interval given does not overlap SNP position according to our database." % opts.refsnp.snp;
-        print >> sys.stderr, "Given interval: %s\t Genomic position: %s" % (
+        msg = "Warning: skipping SNP %s, genomic interval given does not overlap SNP position according to our database." % opts.refsnp.snp;
+        msg += "\nGiven interval: %s\t Genomic position: %s" % (
           regionString(opts.chr,opts.start,opts.end),
           "chr" + str(chr) + ":" + str(pos)
         );
+        die(msg);
+        
+    elif opts.refgene:
+      refgene_info = findGeneInfo(opts.refgene,opts.sqlite_db_file);
+      if refgene_info == None:
+        die("Error: gene selected for plotting was not found in refFlat.");
+  
+      flank = opts.flank;
+      if opts.flank == None:
+        flank = convertFlank(DEFAULT_GENE_FLANK);
+        
+      gene_rs = refgene_info['txStart'] - flank;
+      gene_re = refgene_info['txEnd'] + flank;
+  
+      opts.snplist.append((
+        opts.refsnp,
+        refgene_info['chrom'],
+        gene_rs,
+        gene_re,
+      ));
+      
+    elif opts.flank:
+      opts.snplist.append( (opts.refsnp,chr,pos-opts.flank,pos+opts.flank) );
+      
     else:
-      print "No flank or chr/start/stop given, using default flank of %s.." % DEFAULT_SNP_FLANK;
+      print "No flank, chr/start/stop, or reference gene given, using default flank of %s.." % DEFAULT_SNP_FLANK;
       def_flank = convertFlank(DEFAULT_SNP_FLANK);
       opts.snplist.append( (opts.refsnp,chr,pos-def_flank,pos+def_flank) );
       
