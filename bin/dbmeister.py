@@ -31,18 +31,13 @@ from optparse import OptionParser,SUPPRESS_HELP
 # Fix script location.
 sys.argv[0] = os.path.abspath(sys.argv[0]);
 
-# Import which functions for finding files on path.
-which = imp.load_source(
-  "which",
-  os.path.join(os.path.dirname(sys.argv[0]),"../src/which.py")
-);
-
 # Program constants.
 LOG_NAME = "locuszoom.dbmeister";
 
 # Config constants. 
 sys.path.insert(0,os.path.join(os.path.dirname(sys.argv[0]),"../src/"));
 from m2zfast import *
+from m2zutils import which
 
 def die(msg):
   print >> sys.stderr, msg;
@@ -92,7 +87,8 @@ def getSettings():
   p = OptionParser();
   p.add_option("-d","--db",help="Database file to modify or create.");
   p.add_option("--snp_pos",help="Flat file for SNP positions.");
-  p.add_option("--refflat",help="Flat file for gene information.");
+  p.add_option("--refflat",help="Flat file for RefSeq Genes (refFlat) gene information.");
+  p.add_option("--knowngene",help="Flat file for UCSC Genes (knownGene) gene information.");
   p.add_option("--snp_set",help="Flat file for sets of SNPs.")
   p.add_option("--var_annot",help="Flat file for SNP annotation.");
   p.add_option("--recomb_rate",help="Flat file containing recombination rates.");
@@ -115,7 +111,7 @@ def getSettings():
         "use -d or --db.");
   
   # Check input files for existence. 
-  for arg in ('snp_pos','refflat','snp_set','var_annot','recomb','trans'):
+  for arg in ('snp_pos','refflat','knowngene','snp_set','var_annot','recomb','trans'):
     file = getattr(opts,arg,None);
     if file != None:
       if not os.path.isfile(file):
@@ -133,7 +129,7 @@ def getSettings():
     else:
       # Let's see if it's on their path. 
       try:
-        sqlite_path = which.which("sqlite3");
+        sqlite_path = which("sqlite3");
         if sqlite_path != '' and sqlite_path != None:
           opts.sqlite = sqlite_path;
       except:
@@ -226,8 +222,14 @@ class SQLiteCommand(SQLiteI):
     # Write commands to temporary file. 
     tmp = tempfile.mkstemp();
     f = os.fdopen(tmp[0],'w');
+
+    # Optimizations courtesy David Hinds (23andme). 
+    print >> f, "pragma synchronous=OFF;";
+    print >> f, "pragma cache_size=500000;";
+
     for cmd in cmds:
       print >> f, cmd;
+    
     f.close();
     
     # Execute commands.
@@ -455,6 +457,35 @@ class SQLiteLoader():
     else:
       getLog().info("Skipping file %s due to errors.." % file);
 
+  def load_knowngene(self,file):
+    columns = "geneName,name,chrom,strand,txStart,txEnd,cdsStart,cdsEnd,"\
+              "exonCount,exonStarts,exonEnds".split(",");
+    types = "TEXT,TEXT,TEXT,TEXT,INTEGER,INTEGER,INTEGER,INTEGER,INTEGER,"\
+            "BLOB,BLOB,INTEGER".split(",");
+    file_ok = check_file(file,columns);
+    if file_ok:
+      getLog().info("Loading knownGene (custom) table from file %s.." % file);
+      
+      # Drop the original table if one existed.
+      self.dbi.drop_table(SQLITE_KNOWNGENE);
+      
+      # Create table.
+      self.dbi.create_table(SQLITE_KNOWNGENE,
+                        columns,
+                        types);
+      
+      # Load table into database. 
+      self.dbi.load_table(SQLITE_KNOWNGENE,file);
+      
+      # Get rid of header row.
+      self.dbi.remove_header(SQLITE_KNOWNGENE,'geneName','geneName');
+      
+      # Create indices.
+      self.dbi.create_index(SQLITE_KNOWNGENE,['chrom','txStart','txEnd']);
+      self.dbi.create_index(SQLITE_KNOWNGENE,['geneName']);
+    else:
+      getLog().info("Skipping file %s due to errors.." % file);
+
   def load_var_annot(self,file):
     file_ok = check_file(file,['snp','chr','pos','annot_rank']);
     if file_ok:
@@ -545,6 +576,9 @@ def main():
   if opts.refflat:
     loader.load_refflat(opts.refflat);
     
+  if opts.knowngene:
+    loader.load_knowngene(opts.knowngene);
+
   if opts.var_annot:
     loader.load_var_annot(opts.var_annot);
 

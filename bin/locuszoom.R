@@ -1102,7 +1102,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 			    name="title",
                 clip="off");
 		    pushViewport(titleVp);
-			grid.text(args[['title']],gp=gpar(cex=2,col=args[['titleColor']]));
+			grid.text(args[['title']],gp=gpar(cex=2,col=args[['titleColor']],fontface=args[['titleFontFace']]));
 			upViewport(1);
 
 ########## pvals
@@ -1611,6 +1611,7 @@ default.args <- list(
 	refsnpLineAlpha = .5,                 # alpha for ref snp line
 	title = "",                           # title for plot
 	titleColor = "black",                 # color for title 
+  titleFontFace = "plain",              # font face for title, use "italic" for genes
 	thresh = 1,                           # only get pvalues <= thresh   # this is now ignored.
 	width = 10,                           # width of pdf (inches)
 	height = 7,                           # height of pdf (inches)
