@@ -1116,7 +1116,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 		pushViewport(pvalVp);
 		grid.yaxis(at=args[['yat']],gp=gpar(cex=args[['axisSize']],col=args[['frameColor']],alpha=args[['frameAlpha']]));
 #		grid.xaxis(at=args[['xat']],gp=gpar(cex=args[['axisSize']],col=args[['frameColor']],alpha=args[['frameAlpha']]));
-		if (length(args[['ylab']]) > 0) {
+		if (length(args[['ylab']]) > 1) {
 			grid.text(x=unit(args[['ylabPos']],'lines'),label=args[['ylab']],rot=90, 
 				gp=gpar(cex=args[['axisTextSize']], col=args[['axisTextColor']], alpha=args[['frameAlpha']]) 
 			);
