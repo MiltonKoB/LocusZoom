@@ -32,6 +32,7 @@ import time
 import re
 import tempfile
 import platform
+import math
 from m2zutils import *
 from FugueFinder import *
 from PlinkFinder import *
@@ -131,19 +132,45 @@ def printSupportedTrios(ld_db):
       for pop in ld_db[source][build]:
         print "   +- %s" % pop;
 
-def parseArgs(args):
-  result = [];
-  for i in xrange(len(args)):
-    if args[i] != "=" and args[i].find("=") != -1:
-      result.append(args[i]);
-    elif args[i] == "=":
-      result.append(args[i-1] + "=" + args[i + 1]);
-      
-  d = dict()
-  for e in result:
-    (arg, val) = e.split("=");
-    d[arg] = val
+def parse_rargs(args):
+  if hasattr(args,'__iter__'):
+    if not isinstance(args,str):
+      args = " ".join(args);
+
+  args = args.split("=");
+  args = [i.strip().split() for i in args];
+ 
+  new_args = [];
+
+  for x in args:
+    if isinstance(x,list):
+      for e in x:
+        new_args.append(e);
+    else:
+      new_args.append(x);
+
+  if int(math.fmod(len(new_args),2)) == 1:
+    raise Exception, "arg vector is %s" % str(new_args);
+
+  d = {};
+  for i in xrange(0,len(new_args),2):
+    d[new_args[i]] = new_args[i+1];
+
   return d;
+
+#def parseArgs(args):
+#  result = [];
+#  for i in xrange(len(args)):
+#    if args[i] != "=" and args[i].find("=") != -1:
+#      result.append(args[i]);
+#    elif args[i] == "=":
+#      result.append(args[i-1] + "=" + args[i + 1]);
+#      
+#  d = dict()
+#  for e in result:
+#    (arg, val) = e.split("=");
+#    d[arg] = val
+#  return d;
 
 def quoteArgs(m2z_args):
   new_args = [];
@@ -761,7 +788,7 @@ def printArgs(args):
   table.set_field_align('Option','l');
   table.set_field_align('Value','l');
   
-  d = parseArgs(args);
+  d = parse_rargs(args);
   for i,j in d.iteritems():
     table.add_row([str(i),str(j)]);
   
@@ -1092,6 +1119,11 @@ def getSettings():
   if opts.pvalcol != None:
     args.append("pvalCol=%s" % opts.pvalcol);
 
+  m2zargs = parse_rargs(args);
+  if 'snpset' in m2zargs:
+    print >> sys.stderr, "Warning: overriding --snpset %s with option given as snpset=%s.." % (opts.snpset,m2zargs['snpset']);
+    opts.snpset = m2zargs['snpset'];
+
   # Print warnings about deprecated options. 
   if opts.offline:
     print >> sys.stderr, "Warning: --offline no longer required, option will be ignored..";
@@ -1363,7 +1395,21 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   pqueries = {};
   print "Grabbing annotations from SQLite database..";
   pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file);
+
+  user_rargs = parse_rargs(args);
+ 
+  user_snpset = user_rargs.get('snpset');
+  if user_snpset != None and 'NULL' in user_snpset:
+    user_rargs['snpsetFile'] = "NULL";
+
+  if opts.snpset == "NULL":
+    user_rargs['snpsetFile'] = "NULL";
+
   for m2zarg,file in pqueries.iteritems():
+    # If the user overrides any of the "pquery files", don't set it. 
+    if m2zarg in user_rargs:
+      continue;
+
     if file != None:
       args += " %s=%s" % (m2zarg,file);
     else:
