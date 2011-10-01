@@ -33,6 +33,7 @@ import re
 import tempfile
 import platform
 import math
+import shlex
 from m2zutils import *
 from FugueFinder import *
 from PlinkFinder import *
@@ -132,33 +133,30 @@ def printSupportedTrios(ld_db):
       for pop in ld_db[source][build]:
         print "   +- %s" % pop;
 
-def parse_rargs(args):
-  if hasattr(args,'__iter__'):
-    if not isinstance(args,str):
-      args = " ".join(args);
+def parse_rargs(arg_list):
+  args = map(str.strip," ".join(arg_list).split("="));
 
-  args = args.split("=");
-  args = [i.strip().split() for i in args];
- 
-  new_args = [];
+  new_args = {};
 
-  for x in args:
-    if isinstance(x,list):
-      for e in x:
-        new_args.append(e);
-    else:
-      new_args.append(x);
+  try:
+    for i in xrange(1,len(args)):
+      k = args[i-1].split()[-1];
 
-  if int(math.fmod(len(new_args),2)) == 1:
-    raise Exception, "arg vector is %s" % str(new_args);
+      vlist = args[i].split();
+      if len(vlist) == 1:
+        v = vlist[0];
+      else:
+        v = " ".join(vlist[0:-1]);
 
-  d = {};
-  for i in xrange(0,len(new_args),2):
-    d[new_args[i]] = new_args[i+1];
+      new_args[k] = v;
+  except:
+    raise Exception, ("Error: something wrong with your plotting arguments. They "
+                      "should all be of the form arg=value, no spaces, value should "
+                      "be quoted if it has spaces. ")
 
-  return d;
+  return new_args;
 
-#def parseArgs(args):
+#def parse_rargs(args):
 #  result = [];
 #  for i in xrange(len(args)):
 #    if args[i] != "=" and args[i].find("=") != -1:
@@ -1396,7 +1394,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   print "Grabbing annotations from SQLite database..";
   pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file);
 
-  user_rargs = parse_rargs(args);
+  user_rargs = parse_rargs(shlex.split(args));
  
   user_snpset = user_rargs.get('snpset');
   if user_snpset != None and 'NULL' in user_snpset:
@@ -1444,8 +1442,7 @@ def main():
 
   # Metal2zoom arguments must be quoted to work properly on the command line.
   # i.e. title="Plot title"
-  args = quoteArgs(args);
-  args = " ".join(args);
+  args = " ".join(['%s="%s"' % (i[0],i[1]) for i in parse_rargs(args).items()]);
 
   # Build parameter.
   args += " build=%s" % opts.build;

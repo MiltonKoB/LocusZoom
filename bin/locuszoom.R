@@ -1116,7 +1116,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 		pushViewport(pvalVp);
 		grid.yaxis(at=args[['yat']],gp=gpar(cex=args[['axisSize']],col=args[['frameColor']],alpha=args[['frameAlpha']]));
 #		grid.xaxis(at=args[['xat']],gp=gpar(cex=args[['axisSize']],col=args[['frameColor']],alpha=args[['frameAlpha']]));
-		if (length(args[['ylab']]) > 1) {
+		if (!is.null(args[['ylab']]) && nchar(args[['ylab']]) > 0) {
 			grid.text(x=unit(args[['ylabPos']],'lines'),label=args[['ylab']],rot=90, 
 				gp=gpar(cex=args[['axisTextSize']], col=args[['axisTextColor']], alpha=args[['frameAlpha']]) 
 			);
@@ -1596,7 +1596,7 @@ default.args <- list(
 	flank = "300kb",                      # surround refsnp by this much
 	xlabPos = -3.0,                       # position of xaxis label (in lines relative to bottom panel)
 	ylabPos = -3.0,                       # position of yaxis label (in lines relative to left edge of panel)
-	ylab = "",                            # override default label for y-axis
+	ylab = NULL,                            # override default label for y-axis
 	recombPos = 3.0,                      # position of recomb label (in lines relative to right edge of panel)
 	axisSize = 1,                         # sclaing factor for axes
 	axisTextSize = 1,                     # sclaing factor for axis labels
