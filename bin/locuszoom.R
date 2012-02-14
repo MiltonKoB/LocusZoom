@@ -250,7 +250,7 @@ ryan.theme <- function(args) {
 		recombPos=3, 
 		xlabPos=-2.75,
 		height=9,
-		rfrows=4
+		rfrows='4'
 	)
 	return(ModifyList(args,argUpdates));
 }
@@ -1102,7 +1102,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 			    name="title",
                 clip="off");
 		    pushViewport(titleVp);
-			grid.text(args[['title']],gp=gpar(cex=2,col=args[['titleColor']],fontface=args[['titleFontFace']]));
+			grid.text(args[['title']],gp=gpar(cex=args[['titleCex']],col=args[['titleColor']],fontface=args[['titleFontFace']]));
 			upViewport(1);
 
 ########## pvals
@@ -1612,6 +1612,7 @@ default.args <- list(
 	title = "",                           # title for plot
 	titleColor = "black",                 # color for title 
   titleFontFace = "plain",              # font face for title, use "italic" for genes
+  titleCex = 2,                         # size change for title
 	thresh = 1,                           # only get pvalues <= thresh   # this is now ignored.
 	width = 10,                           # width of pdf (inches)
 	height = 7,                           # height of pdf (inches)

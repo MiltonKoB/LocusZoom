@@ -58,7 +58,7 @@ class LDRegionCache():
       print >> sys.stderr, "Available keys: "
       for key in self.db.keys():
         print str(key);
-      print >> sys.stderr, "Protocol version: " % self.db.get('proto');
+      print >> sys.stderr, "Protocol version: %s" % self.db.get('proto');
       sys.exit(1);
       
     if self.root == None:
