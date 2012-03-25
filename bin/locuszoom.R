@@ -1733,7 +1733,7 @@ if ( args[['dryRun']] )  {
 
 if ( is.null(args[['reload']]) ) {
 		if ( file.exists( args[['metal']]) ) {
-			metal <- read.file(args[['metal']]);
+			metal <- read.file(args[['metal']],sep="\t");
 		} else {
 			stop(paste('No such file: ', args[['metal']]));
 		}
