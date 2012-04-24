@@ -1636,7 +1636,7 @@ default.args <- list(
 	smallDot = .4,                        # smallest p-value cex 
 	largeDot = .8,                        # largest p-value cex 
 	refDot = NULL,                        # largest p-value cex 
-	rfrows = '4',                         # max number of rows for reflat genes
+	rfrows = '10',                         # max number of rows for reflat genes
 	warnMissingGenes = FALSE,             # should we warn about missing genese on the plot?
 	showPartialGenes = TRUE,              # should genes that don't fit completely be displayed?
 	shiftGeneNames = TRUE,                # should genes that don't fit completely be displayed?
