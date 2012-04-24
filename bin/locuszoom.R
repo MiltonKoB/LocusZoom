@@ -932,7 +932,7 @@ panel.flatbed <-  function (x=NULL, y=NULL, flat, fill = "navy", col = "navy", a
 			
 		}
 
-		if (optRows > requestedRows && args[['warnMissingGenes']]) {
+		if (optRows > requestedRows && as.logical(args[['warnMissingGenes']])) {
 			omitIdx <- which(id2row > rows)
 			assign("omittedGenes",as.character(df0uniq$name[omitIdx]),globalenv())
 			numberOfMissingGenes <- length(omittedGenes);
