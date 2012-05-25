@@ -701,6 +701,10 @@ def create_tests():
   gold8.gold_std("tests/standards/no_annot_100118_rs4846914.pdf");
   tests.append(gold8);
 
+  gold9 = Test("--prefix gold9 --metal tests/data/HDL_ONE_Eur_b36_normcols.tbl --refsnp rs4846914 --flank 600kb --plotonly --prefix no_annot showAnnot=F smallDot=.5 bigDot=2 weightCol=weight");
+  gold9.title = "GALNT2 Region, no SNP annotations";
+  gold9.gold_std("tests/standards/no_annot_100118_rs4846914.pdf");
+  tests.append(gold9);
   return tests;
 
 def main():

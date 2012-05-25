@@ -552,14 +552,22 @@ chr2chrom <- function (x) {
 # If all values are equal, then return a vector the same length as x
 # with all values set to constant (by default the larger end of the interval).
 #
-rescale <- function(x, original=c(min(x),max(x)), transformed = c(0,1) ){
-
-	if ( length(transformed) != 2 || ! is.numeric(transformed) ||
-	        length(original) != 2 || ! is.numeric(original) ) 
+rescale <- function(x, 
+					oldScale=range(x, na.rm=TRUE), 
+					newScale = c(0,1), 
+					transformation = function(x) x )
+{
+	x <- transformation(x)
+	# lazy evaluation takes care of oldScale <- transformation(oldScale) in default case
+	if ( length(newScale) != 2 || ! is.numeric(newScale) ||
+	        length(oldScale) != 2 || ! is.numeric(oldScale) ) 
 		{ return (x); }
 
-	a <- original[1]; b <- original[2];
-	u <- transformed[1]; v <- transformed[2];
+	a <- oldScale[1]; b <- oldScale[2];
+	u <- newScale[1]; v <- newScale[2];
+  
+  print( c(a=a,b=b,u=u,v=v) )
+  print(summary(x))
 
 	r <- v - (b-x)/(b-a) * (v-u);
 	r[r < u] <- u;
@@ -1006,8 +1014,8 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
 	if ( char2Rname(args[['weightCol']]) %in% names(metal) ){
 		metal$Weight <- metal[ ,char2Rname(args[['weightCol']]) ];
-		dotSizes <- rescale( log(pmax(1,metal$Weight)), c(log(1000), log(100000)), 
-			c(args[['smallDot']],args[['largeDot']] ) ) ; 
+		dotSizes <- rescale( metal$Weight, newScale = c(args[['smallDot']],args[['largeDot']] ), 
+							transformation=sqrt ) ; 
 	} else {
 		dotSizes <- rep(args[['largeDot']], dim(metal)[1] );
 		if (! is.null(args[['refDot']]) ) {
