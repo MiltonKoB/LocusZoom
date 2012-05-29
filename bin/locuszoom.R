@@ -428,6 +428,12 @@ AdjustModesOfArgs <- function(args) {
 				c('ldCuts','xat','yat','annotPch'),
 				function(x) { as.numeric(unlist(strsplit(x,","))) } );
 
+		if (!is.null(weightRange)) {
+			args <- sublapply( args,
+				c('weightRange'),
+				function(x) { as.numeric(unlist(strsplit(x,","))) } );
+		}
+
 		args <- sublapply( args,
 				c('rfrows'),
 				function(x) { as.integer(unlist(strsplit(x,","))) } );
@@ -559,6 +565,7 @@ rescale <- function(x,
 {
 	x <- transformation(x)
 	# lazy evaluation takes care of oldScale <- transformation(oldScale) in default case
+	if (is.null(oldScale)) oldScale=range(x, na.rm=TRUE)  # treat NULL like missing
 	if ( length(newScale) != 2 || ! is.numeric(newScale) ||
 	        length(oldScale) != 2 || ! is.numeric(oldScale) ) 
 		{ return (x); }
@@ -1014,7 +1021,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
 	if ( char2Rname(args[['weightCol']]) %in% names(metal) ){
 		metal$Weight <- metal[ ,char2Rname(args[['weightCol']]) ];
-		dotSizes <- rescale( metal$Weight, newScale = c(args[['smallDot']],args[['largeDot']] ), 
+		dotSizes <- rescale( metal$Weight, oldScale= args[['weightRange']], newScale = c(args[['smallDot']], args[['largeDot']] ), 
 							transformation=sqrt ) ; 
 	} else {
 		dotSizes <- rep(args[['largeDot']], dim(metal)[1] );
@@ -1593,6 +1600,7 @@ default.args <- list(
 	posCol="pos",                         # name for positions column in metal file
 	markerCol="MarkerName",               # name for MarkerName column in metal file
 	weightCol="Weight",                   # name for weights column in metal file
+	weightRange=NULL,                     # use this instead of actual range of weights
 	ymin=0,                               # min for p-value range (expanded to fit all p-vals if needed)
 	ymax=10,                              # max for p-value range (expanded to fit all p-vals if needed)
 	yat=NULL,                             # values for y-axis ticks
