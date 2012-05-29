@@ -428,7 +428,7 @@ AdjustModesOfArgs <- function(args) {
 				c('ldCuts','xat','yat','annotPch'),
 				function(x) { as.numeric(unlist(strsplit(x,","))) } );
 
-		if (!is.null(weightRange)) {
+		if (!is.null(args[['weightRange']])) {
 			args <- sublapply( args,
 				c('weightRange'),
 				function(x) { as.numeric(unlist(strsplit(x,","))) } );
