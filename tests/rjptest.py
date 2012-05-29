@@ -321,9 +321,9 @@ def create_tests():
   
   tests = []; 
 
-  gold9 = Test("--metal tests/data/HDL_ONE_Eur_b36.tbl --prefix gold9 --metal tests/data/HDL_ONE_Eur_b36.tbl --gene TCF7L2 --pvalcol GC.Pvalue --flank 600kb --plotonly  showAnnot=F smallDot=.5 bigDot=2 weightCol=weight");
+  gold9 = Test("--metal tests/data/HDL_ONE_Eur_b36.tbl --prefix gold9 --metal tests/data/HDL_ONE_Eur_b36.tbl --refgene TCF7L2 --markercol SNPColumn --pvalcol GC.Pvalue --flank 60kb showAnnot=FALSE smallDot=0.8 largeDot=2.0 weightCol=Weight weightRange=90000,100000");
   gold9.title = "TCF7L2 Region, dot sizes by weight";
-  gold9.gold_std("tests/standards/no_annot_100118_rs4846914.pdf");
+  gold9.gold_std("tests/standards/chr10_114639998-114977426.pdf");
   tests.append(gold9);
   return tests;
 
