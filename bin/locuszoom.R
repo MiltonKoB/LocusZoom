@@ -563,9 +563,9 @@ rescale <- function(x,
 					newScale = c(0,1), 
 					transformation = function(x) x )
 {
-	x <- transformation(x)
-	# lazy evaluation takes care of oldScale <- transformation(oldScale) in default case
 	if (is.null(oldScale)) oldScale=range(x, na.rm=TRUE)  # treat NULL like missing
+	x <- transformation(x)
+	oldScale <- transformation(oldScale)
 	if ( length(newScale) != 2 || ! is.numeric(newScale) ||
 	        length(oldScale) != 2 || ! is.numeric(oldScale) ) 
 		{ return (x); }
