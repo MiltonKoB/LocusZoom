@@ -32,6 +32,12 @@ def singleton(cls):
 
 def which(f):
   for path in os.environ['PATH'].split(os.pathsep):
+    if not os.path.exists(path):
+      continue;
+
+    if not os.path.isdir(path):
+      continue;
+    
     for file in os.listdir(path):
       if os.path.basename(f) == file:
         return os.path.join(path,file);
