@@ -26,11 +26,11 @@ require(methods);
 omittedGenes <- character(0);     # will be set in gobalenv()
 warningMessages <- character(0);  # will be set in gobalenv()
 
-options(error = function(...) {
-  sink(NULL);
-  sink(NULL,type="message");
-  recover(...);
-})
+#options(error = function(...) {
+#  sink(NULL);
+#  sink(NULL,type="message");
+#  recover(...);
+#})
 
 ################################################################################################
 # function definitions
@@ -1292,8 +1292,6 @@ panel.finemap <- function (
     gp = gpar(fill = 'red', col = 'red', alpha = alpha)
   );
 
-  message("plotting intervals");
-
   if ( "textcol" %in% names(df0uniq) ) {
     textcol = df0uniq$textcol
     fill = df0uniq$textcol
@@ -1491,8 +1489,6 @@ panel.gwas <- function (
       lwd = 1
     )
   )
-
-  message("plotting gwas");
 
   if ( "textcol" %in% names(df0uniq) ) {
     textcol = df0uniq$textcol
