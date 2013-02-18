@@ -226,6 +226,8 @@ class SQLiteCommand(SQLiteI):
     # Optimizations courtesy David Hinds (23andme). 
     print >> f, "pragma synchronous=OFF;";
     print >> f, "pragma cache_size=500000;";
+    print >> f, "pragma page_size=4096;";
+    print >> f, "pragma temp_store=MEMORY;";
 
     for cmd in cmds:
       print >> f, cmd;

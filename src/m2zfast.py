@@ -64,9 +64,9 @@ except:
   raise;
 
 # Program strings.
-M2ZFAST_VERSION = "1.1";
+M2ZFAST_VERSION = "1.2";
 M2ZFAST_TITLE = "+---------------------------------------------+\n"\
-                "| LocusZoom 1.1 (06/20/2011)                  |\n"\
+                "| LocusZoom 1.2 (02/15/2013)                  |\n"\
                 "| Plot regional association results           |\n"\
                 "| from GWA scans or candidate gene studies    |\n"\
                 "+---------------------------------------------+\n";
@@ -529,6 +529,10 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
 
 # Runs the R script which actually generates the plot. 
 def runM2Z(metal,metal2zoom_path,ld_file,refsnp,chr,start,end,no_snp_name,verbose,args=""):
+  conf = getConf();
+
+  rscript_path = find_systematic(conf.RSCRIPT_PATH);
+
   # If no LD file was created, make m2z use the database instead. 
   if ld_file == None:
     ld_file = "NULL";
@@ -538,7 +542,8 @@ def runM2Z(metal,metal2zoom_path,ld_file,refsnp,chr,start,end,no_snp_name,verbos
   else:
     refsnpName = refsnp.snp;
 
-  com = "%s metal=%s clobber=F clean=F refsnp=%s refsnpName=%s ld=%s chr=%s start=%s end=%s %s" % (
+  com = "%s %s metal=%s clobber=F clean=F refsnp=%s refsnpName=%s ld=%s chr=%s start=%s end=%s %s" % (
+    rscript_path,
     metal2zoom_path,
     metal,
     refsnp.chrpos,
@@ -1315,15 +1320,38 @@ def runQuery(query,args):
 
   return file;
 
+def listTables(db_file):
+  try:
+    db = sqlite3.connect(db_file);
+    cur = db.execute("select name from sqlite_master where type='table'");
+
+    res = cur.fetchall();
+    tables = [str(i[0]) for i in res];
+    
+    db.close();
+  finally:
+    db.close();
+
+  return tables;
+
 def runQueries(chr,start,stop,snpset,build,db_file):
   results = {};
   
   db = sqlite3.connect(db_file);
+ 
+  db_tables = listTables(db_file);
+
+  if SQLITE_REFFLAT in db_tables:
+    results['refFlat'] = runQuery(refflat_in_region,[db,SQLITE_REFFLAT,chr,start,stop,build]);
   
-  results['refFlat'] = runQuery(refflat_in_region,[db,SQLITE_REFFLAT,chr,start,stop,build]);
-  results['annot'] = runQuery(snp_annot_in_region,[db,SQLITE_SNP_POS,SQLITE_VAR_ANNOT,chr,start,stop,build]);
-  results['recomb'] = runQuery(recomb_in_region,[db,SQLITE_RECOMB_RATE,chr,start,stop,build]);
-  results['snpsetFile'] = runQuery(snpset_in_region,[db,SQLITE_SNP_POS,SQLITE_SNP_SET,snpset,chr,start,stop,build]);
+  if all([x in db_tables for x in (SQLITE_SNP_POS,SQLITE_VAR_ANNOT)]):
+    results['annot'] = runQuery(snp_annot_in_region,[db,SQLITE_SNP_POS,SQLITE_VAR_ANNOT,chr,start,stop,build]);
+
+  if SQLITE_RECOMB_RATE in db_tables:
+    results['recomb'] = runQuery(recomb_in_region,[db,SQLITE_RECOMB_RATE,chr,start,stop,build]);
+    
+  if all([x in db_tables for x in (SQLITE_SNP_POS,SQLITE_SNP_SET)]):
+    results['snpsetFile'] = runQuery(snpset_in_region,[db,SQLITE_SNP_POS,SQLITE_SNP_SET,snpset,chr,start,stop,build]);
   
   return results;
 

@@ -515,7 +515,7 @@ AdjustModesOfArgs <- function(args) {
           'frameAlpha','hiAlpha','rugAlpha',
           'refsnpLineAlpha', 'recombFillAlpha','recombLineAlpha', 'refsnpTextAlpha',
           'ymin','ymax','legendSize','refsnpTextSize','axisSize','axisTextSize','geneFontSize','smallDot',
-          'largeDot','refDot'),
+          'largeDot','refDot','signifLine'),
         as.numeric);
 
     args <- sublapply(args,
@@ -1748,13 +1748,14 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   }
 
   pushViewport(dataViewport(extension=c(0,.05),xRange,recrateRange,name='recrate',clip="off"));
-    if ( args[['showRecomb']] ) {
-          grid.yaxis(main=F,gp=gpar(cex=args[['axisSize']],col=args[['recombAxisColor']],alpha=args[['recombAxisAlpha']]));
+    
+  if ( args[['showRecomb']] ) {
+    grid.yaxis(main=F,gp=gpar(cex=args[['axisSize']],col=args[['recombAxisColor']],alpha=args[['recombAxisAlpha']]));
     grid.text(x=unit(1,'npc')+unit(args[['recombPos']],'lines'),
-        label="Recombination rate (cM/Mb)",rot=270,
-        gp=gpar(cex=args[['axisTextSize']],col=args[['recombAxisColor']],alpha=args[['recombAxisAlpha']]));
+      label="Recombination rate (cM/Mb)",rot=270,
+      gp=gpar(cex=args[['axisTextSize']],col=args[['recombAxisColor']],alpha=args[['recombAxisAlpha']])
+    );
   }
-
 
   if ( args[['showRecomb']] && !args[['recombOver']]) {
     pushViewport(dataViewport(extension=c(0,.05),xRange,recrateRange,name='recrateClipped',clip="on"));
@@ -1773,114 +1774,127 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
   pushViewport(viewport(clip="on",xscale=pvalVp$xscale,yscale=pvalVp$yscale,name='pvalsClipped'));
   grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
-    if (! is.null(refidx)) {
-      if (!is.null(args[['refsnpName']])) {
-        grid.refsnp(name=args[['refsnpName']],pos=metal$pos[refidx]);
-      } else{
-        grid.refsnp(name=refSnp,pos=metal$pos[refidx]);
-      }
+  
+  if (! is.null(refidx)) {
+    if (!is.null(args[['refsnpName']])) {
+      grid.refsnp(name=args[['refsnpName']],pos=metal$pos[refidx]);
+    } else{
+      grid.refsnp(name=refSnp,pos=metal$pos[refidx]);
     }
-    groupIds <-  sort(unique(metal$group))
-    print(table(metal$group));
+  }
+  
+  groupIds <-  sort(unique(metal$group))
+  print(table(metal$group));
 
-    if (args[['bigDiamond']] && args[['showRefsnpAnnot']]) {
-      grid.points(x=metal$pos[refidx],y=transformation(metal$P.value[refidx]), 
-        gp=gpar(col=args[['refsnpColor']],fill=args[['refsnpColor']],cex=1.6*args[['refDot']],alpha=.2),
-        pch=23,
-        default.units='native'
-        );
-    }
+  if (args[['bigDiamond']] && args[['showRefsnpAnnot']]) {
+    grid.points(x=metal$pos[refidx],y=transformation(metal$P.value[refidx]), 
+      gp=gpar(col=args[['refsnpColor']],fill=args[['refsnpColor']],cex=1.6*args[['refDot']],alpha=.2),
+      pch=23,
+      default.units='native'
+      );
+  }
 
-    for (i in groupIds) { 
-        idx <- which(metal$group == i);
-        gmetal <- metal[idx,];
-        colors <- args[['ldColors']][gmetal$group]; 
-        colors[which(gmetal$pch %in% 21:25)] <- 'gray20';
-        grid.points(x=gmetal$pos,y=transformation(gmetal$P.value),
-          pch=gmetal$pch,
-          gp=gpar(
-            cex=dotSizes[idx], 
-            col=colors,
-            fill=args[['ldColors']][gmetal$group]
-          )); 
-    }
+  for (i in groupIds) { 
+    idx <- which(metal$group == i);
+    gmetal <- metal[idx,];
+    colors <- args[['ldColors']][gmetal$group]; 
+    colors[which(gmetal$pch %in% 21:25)] <- 'gray20';
+    grid.points(x=gmetal$pos,y=transformation(gmetal$P.value),
+      pch=gmetal$pch,
+      gp=gpar(
+        cex=dotSizes[idx], 
+        col=colors,
+        fill=args[['ldColors']][gmetal$group]
+      )); 
+  }
 
-    if (FALSE) {
-      grid.points(x=metal$pos[refidx],y=transformation(metal$P.value[refidx]), 
-        gp=gpar(col=args[['refsnpColor']],fill=args[['refsnpColor']],
-        cex= if (args[['bigDiamond']] & args[['showRefsnpAnnot']]) 1.6*args[['refDot']] else args[['refDot']]),
-        pch= if (args[['bigDiamond']] & args[['showRefsnpAnnot']]) 5 else metal$pch[refidx],
-        default.units='native'
-        );
-    }
-
-      if ( args[['showRecomb']] && args[['recombOver']]) {
-      pushViewport(dataViewport(extension=c(0,.05),xRange,recrateRange,name='recrateClipped',
-                clip="on"));
-      if (args[['recombFill']]) {
-        grid.polygon(x=recrate$pos,y=recrate$recomb,
-          gp=gpar(alpha=args[['recombFillAlpha']],col=args[['recombColor']],fill=args[['recombColor']]),
-                default.units='native'
-        );
-      } else {
-        panel.xyplot(recrate$pos,recrate$recomb,type='l',lwd=2,alpha=args[['recombLineAlpha']],col=args[['recombColor']]);
-      }
-      upViewport(1); 
-    }
+  if (!is.null(args[['signifLine']])) {
+    message("signif line at: ",args[['signifLine']]);
     
+    signifLineY = transformation(args[['signifLine']]);
+    message("trans signif line at: ",signifLineY);
+    grid.lines(
+      x = unit(c(0,1),"npc"),
+      y = unit(c(signifLineY,signifLineY),"native"),
+      gp = gpar(lwd=2,lty=2)
+    );
+  }
+
+  if (FALSE) {
+    grid.points(x=metal$pos[refidx],y=transformation(metal$P.value[refidx]), 
+      gp=gpar(col=args[['refsnpColor']],fill=args[['refsnpColor']],
+      cex= if (args[['bigDiamond']] & args[['showRefsnpAnnot']]) 1.6*args[['refDot']] else args[['refDot']]),
+      pch= if (args[['bigDiamond']] & args[['showRefsnpAnnot']]) 5 else metal$pch[refidx],
+      default.units='native'
+    );
+  }
+
+  if ( args[['showRecomb']] && args[['recombOver']]) {
+    pushViewport(dataViewport(extension=c(0,.05),xRange,recrateRange,name='recrateClipped',clip="on"));
+    if (args[['recombFill']]) {
+      grid.polygon(x=recrate$pos,y=recrate$recomb,
+        gp=gpar(alpha=args[['recombFillAlpha']],col=args[['recombColor']],fill=args[['recombColor']]),
+              default.units='native'
+      );
+    } else {
+      panel.xyplot(recrate$pos,recrate$recomb,type='l',lwd=2,alpha=args[['recombLineAlpha']],col=args[['recombColor']]);
+    }
+    upViewport(1); 
+  }
+  
+  grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+
+  pushViewport(viewport(clip="on",name='legend'));
+
+  breaks <- union(args[['ldCuts']],c(0,1));
+  breaks <- sort(unique(breaks));
+  nb <- length(breaks);
+  cols <- args[['ldColors']]
+  cols <- rep(cols, length=nb+2);
+  rl <- ribbonLegend(
+      breaks=breaks,
+      cols=cols[2:(1+nb)],
+      gp=gpar(cex=args[['legendSize']],col=args[['frameColor']],alpha=args[['frameAlapha']])
+    );
+
+  if (args[['legend']] == 'auto') { 
+    args[['legend']] = AutoLegendSide(transformation(metal$P.value),metal$pos,xRange); 
+  }
+
+  if (tolower(args[['legend']]) %in% c('left','right')) {
+    pushViewport(viewport(name='legendVp',
+      x=if (args[['legend']] == 'left') unit(2.5,"char") else unit(1,'npc') - unit(2.5,'char'),
+      y=unit(1,'npc') - unit(.5,'char'),
+      just=c('center','top'),
+      width=unit(4,'char'),
+      height=unit(8,'lines')
+    ));
+    grid.rect(gp=gpar(col='transparent',fill='white',alpha=args[['legendAlpha']]));
     grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
 
-    pushViewport(viewport(clip="on",name='legend'));
+    pushViewport(viewport(
+      name='ribbonLegend',
+      y=0,
+      just=c('center','bottom'),
+      width=unit(4,'char'),
+      height=unit(7,'lines')
+    ));
+    grid.draw(rl);
+    upViewport(1);
 
-    breaks <- union(args[['ldCuts']],c(0,1));
-    breaks <- sort(unique(breaks));
-    nb <- length(breaks);
-    cols <- args[['ldColors']]
-    cols <- rep(cols, length=nb+2);
-    rl <- ribbonLegend(
-        breaks=breaks,
-        cols=cols[2:(1+nb)],
-        gp=gpar(cex=args[['legendSize']],col=args[['frameColor']],alpha=args[['frameAlapha']])
-      );
+    pushViewport(viewport(name='LDTitle',
+      clip="off", 
+      #x=unit(2.5,"char"),
+      width=unit(4,"char"),
+      y=unit(1,'npc') - unit(.25,'char'),
+      just=c('center','top'),
+      height=unit(1,'lines')
+    ))
+    grid.text(args[['LDTitle']], gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+    upViewport(1);
 
-    if (args[['legend']] == 'auto') { 
-      args[['legend']] = AutoLegendSide(transformation(metal$P.value),metal$pos,xRange); 
-    }
-
-    if (tolower(args[['legend']]) %in% c('left','right')) {
-      pushViewport(viewport(name='legendVp',
-        x=if (args[['legend']] == 'left') unit(2.5,"char") else unit(1,'npc') - unit(2.5,'char'),
-        y=unit(1,'npc') - unit(.5,'char'),
-        just=c('center','top'),
-        width=unit(4,'char'),
-        height=unit(8,'lines')
-      ));
-      grid.rect(gp=gpar(col='transparent',fill='white',alpha=args[['legendAlpha']]));
-      grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
-
-      pushViewport(viewport(
-        name='ribbonLegend',
-        y=0,
-        just=c('center','bottom'),
-        width=unit(4,'char'),
-        height=unit(7,'lines')
-      ));
-      grid.draw(rl);
-      upViewport(1);
-
-      pushViewport(viewport(name='LDTitle',
-        clip="off", 
-        #x=unit(2.5,"char"),
-        width=unit(4,"char"),
-        y=unit(1,'npc') - unit(.25,'char'),
-        just=c('center','top'),
-        height=unit(1,'lines')
-      ))
-      grid.text(args[['LDTitle']], gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
-      upViewport(1);
-
-      upViewport(1);
-    } # end if show legend on left or right
+    upViewport(1);
+  } # end if show legend on left or right
 
   upViewport(4);   
 
@@ -2320,6 +2334,7 @@ default.args <- list(
   refsnpTextAlpha = 1,                  # alpha for ref snp label
   refsnpLineColor = "transparent",      # color for ref snp line (invisible by default)
   refsnpLineAlpha = .5,                 # alpha for ref snp line
+  signifLine = NULL,                    # draw a horizontal line at significance threshold (specify in p-value scale)
   title = "",                           # title for plot
   titleColor = "black",                 # color for title 
   titleFontFace = "plain",              # font face for title, use "italic" for genes
@@ -2714,11 +2729,9 @@ if ( is.null(args[['reload']]) ) {
     cat(" Done.\n");
     print(head(metal));
 
-    metal$annot <- 
-      c('no annotation','framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental')[1+metal$annot_rank];
+    metal$annot <- c('no annotation','framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental')[1+metal$annot_rank];
     if ( is.null(args[['annotOrder']]) ) {
-      args[['annotOrder']] <- 
-        c('framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental','no annotation')
+      args[['annotOrder']] <- c('framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental','no annotation')
     } 
     metal$annot <- MakeFactor(metal$annot, levels=args[['annotOrder']],na.level='none') 
     pchVals <- rep(args[['annotPch']], length=length(levels(metal$annot)));
