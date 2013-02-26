@@ -17,20 +17,32 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-require(stats);
-require(utils);
-require(grid);
-require(lattice);
-require(methods);
+suppressPackageStartupMessages({
+  require(stats);
+  require(utils);
+  require(grid);
+  require(lattice);
+  require(methods);
+});
 
 omittedGenes <- character(0);     # will be set in gobalenv()
+omittedFineMap <- character(0);
+omittedGWAS <- character(0);
 warningMessages <- character(0);  # will be set in gobalenv()
 
-#options(error = function(...) {
-#  sink(NULL);
-#  sink(NULL,type="message");
-#  recover(...);
-#})
+options(error = function(...) {
+ sink(NULL);
+ sink(NULL,type="message");
+ recover(...);
+})
+
+my_browser = function() {
+  sink(NULL);
+  sink(NULL,type="message");
+  sink(NULL);
+  sink(NULL,type="message");
+  browser();
+}
 
 ################################################################################################
 # function definitions
@@ -46,6 +58,15 @@ as.filename <- function(x) {
   } else {
     return(x)
   }
+}
+
+# Quick function to change column names of data frame
+# (by name, not by position.)
+change_names = function(dframe,name_list) {
+  for (n in names(name_list)) {
+    names(dframe)[names(dframe)==n] = name_list[[n]];
+  }
+  dframe;
 }
 
 ################################################################################
@@ -375,7 +396,7 @@ GetDataFromFileIgnoreCommand <- function(file, command, default=data.frame(), cl
   return(results);
 }
 
-LoadFineMapPP = function(file,cred.int=0.95,verbose=TRUE,...) {
+LoadFineMap = function(file,verbose=TRUE,...) {
   if (!file.exists(file)) {
     # try directory above
     file = file.path("..",file);
@@ -385,72 +406,26 @@ LoadFineMapPP = function(file,cred.int=0.95,verbose=TRUE,...) {
     }
   }
 
-  ppdata = read.table(file,header=T,sep="\t");
+  ppdata = read.table(file,header=T,sep="\t",stringsAsFactors=F);
   names(ppdata) = tolower(names(ppdata))
 
   # Do we have the correct columns? 
-  if (!all(c("chr","pos","pp") %in% names(ppdata))) {
-    warning("fine mapping pp file given, but did not have correct columns (or header)")
+  req_cols = c("snp","chr","pos","pp","group","color");
+  if (!all(req_cols %in% names(ppdata))) {
+    errmsg = paste(
+      "fine mapping pp file given, but did not have correct columns (or header)",
+      "required columns are: ",
+      paste(req_cols, collapse = ", ")
+      ,collapse = "\n"
+    );
+    warning(errmsg)
     return(NULL);
   }
-
-  # Are all of these SNPs on the same chromosome? 
-  if (length(unique(ppdata$chr)) > 1) {
-    warning("fine mapping pp file should have only SNPs on same chromosome");
-    return(NULL);
-  }
-
-  # Find the SNPs that add up to cred.int% of the total density. 
-  ppdata = ppdata[order(ppdata$pp,decreasing=T),];
-  ppdata$cd = cumsum(ppdata$pp);
-
-  # Restrict to just those SNPs in the credible interval. 
-  ppdata = subset(ppdata,cd < cred.int);
-
-  # Calculate coordinates. 
-  start = min(ppdata$pos);
-  stop = max(ppdata$pos);
-
-  # Stats for the interval name. 
-  num_pp_snps = dim(ppdata)[1];
-  total_dist = (stop - start) / 1000; # kb
 
   # Coordinates need to be in MB...
-  start = start / 1E6;
-  stop = stop / 1E6;
+  ppdata$pos = ppdata$pos / 1E6;
 
-  data.frame(
-    start = start,
-    stop = stop,
-    chr = ppdata$chr[1],
-    name = sprintf("%i SNPs, %0.2f kb",num_pp_snps,total_dist)
-  )
-}
-
-LoadFineMapRegions = function(file,verbose=TRUE,...) {
-  if (!file.exists(file)) {
-    # try directory above
-    file = file.path("..",file);
-    if (!file.exists(file)) {
-      warning("could not find fine mapping regions file..");
-      return(NULL);
-    }
-  }
-
-  regions = read.table(file,header=T,sep="\t");
-  names(regions) = tolower(names(regions));
-
-  # Do we have the correct columns? 
-  if (!all(c("chr","start","stop","name") %in% names(regions))) {
-    warning("fine mapping regions file given, but did not have correct columns (or header)")
-    return(NULL);
-  }
-
-  # Convert start/stops to megabase. 
-  regions$start = regions$start / 1E6;
-  regions$stop = regions$stop / 1E6;
-
-  regions;
+  ppdata;
 }
 
 LoadGWASHits = function(file,verbose=TRUE,...) {
@@ -1144,7 +1119,7 @@ panel.flatbed <- function (
 }
 
 panel.finemap <- function (
-  regions, 
+  fmdata, 
   fill = "navy", 
   col = "navy", 
   alpha = 1, 
@@ -1152,29 +1127,41 @@ panel.finemap <- function (
   multiplier = 0.001, 
   height = 3/14, 
   buffer=0.003, 
-  subset, 
-  cex=.9, 
+  cex=.8, 
   rows=2,
   showPartial=FALSE,
   shiftNames=TRUE,
   computeOptimalRows=FALSE, ...) 
 { 
-  if (is.null(regions)) {
+  if (is.null(fmdata)) {
     return(0);
   }     
 
-  if ( prod(dim(regions)) <= 0 ) { 
+  if ( prod(dim(fmdata)) <= 0 ) { 
     return(0); 
   }
 
+  # Convert into regions for computing width of intervals 
+  # and for name placement. 
+  regions = NULL;
+  for (fmgroup in unique(fmdata$group)) {
+    chunk = subset(fmdata,group == fmgroup);
+    chunk_start = min(chunk$pos);
+    chunk_stop = max(chunk$pos);
+    regions = rbind(regions,data.frame(
+      name = fmgroup,
+      start = chunk_start,
+      stop = chunk_stop
+    ));
+  }
+  
   df <- regions;
-
-  if (!missing(subset)) { df <- df[subset, ] }
 
   df$width <- df$stop - df$start;
 
   df$idnum <- match(df$name,unique(df$name));
-    df0 = df;
+  
+  df0 = df;
 
   # removed duplicate idnums from df0
   df0 <- df0[order(df0$idnum),]     # sort to make sure repeated ids are adjacent
@@ -1253,8 +1240,8 @@ panel.finemap <- function (
 
   if (optRows > requestedRows && as.logical(args[['warnMissingFineMap']])) {
     omitIdx <- which(id2row > rows)
-    assign("omittedGenes",as.character(df0uniq$name[omitIdx]),globalenv())
-    numberOfMissingGenes <- length(omittedGenes);
+    assign("omittedFineMap",as.character(df0uniq$name[omitIdx]),globalenv())
+    numberOfMissingGenes <- length(omittedFineMap);
     message <- paste(numberOfMissingGenes," region",if(numberOfMissingGenes > 1) "s" else "", "\nomitted",sep="")
     pushViewport(viewport(clip='off'));
     grid.text(message ,x=unit(1,'npc') + unit(1,'lines'), y=.5, just=c('left','center'),
@@ -1272,26 +1259,26 @@ panel.finemap <- function (
       return( unit( (rows-id2row[id]) * increment + 2/7*increment, "npc") )
     }
   }
-
-  # grid.segments(
- #    x0 = multiplier + df0$start, 
- #    x1 = df0$stop, 
-  #   y0 = yPos(df0$idnum),
-  #   y1 = yPos(df0$idnum),
-  #   default.units = "native", 
-  #   gp = gpar(col = 'red', lwd=5, alpha = alpha)
-  # );
-
-  grid.rect(
-    x = multiplier + df0$start, 
-    width = df0$width, 
-    just = "left", 
-    y = yPos(df0$idnum),
-    height = unit(height * increment, "npc"), 
-    default.units = "native", 
-    gp = gpar(fill = 'red', col = 'red', alpha = alpha)
+  
+  # Figure out which row each group/points are supposed to be on..
+  fmdata$idnum = df0$idnum[match(fmdata$group,df0$name)];
+    
+  grid.polyline(
+    x = fmdata$pos,
+    y = yPos(fmdata$idnum,text=FALSE),
+    default.units = "native",
+    gp = gpar(col = unique(fmdata$color)),
+    id = fmdata$idnum
   );
-
+  
+  grid.points(
+    x = fmdata$pos,
+    y = yPos(fmdata$idnum,text=FALSE),
+    default.units = "native",
+    pch = 20,
+    gp = gpar(col = fmdata$color, cex = 0.8)
+  );
+  
   if ( "textcol" %in% names(df0uniq) ) {
     textcol = df0uniq$textcol
     fill = df0uniq$textcol
@@ -1428,8 +1415,8 @@ panel.gwas <- function (
 
   if (optRows > requestedRows && as.logical(args[['warnMissingGWAS']])) {
     omitIdx <- which(id2row > rows)
-    assign("omittedGenes",as.character(df0uniq$name[omitIdx]),globalenv())
-    numberOfMissingGenes <- length(omittedGenes);
+    assign("omittedGWAS",as.character(df0uniq$name[omitIdx]),globalenv())
+    numberOfMissingGenes <- length(omittedGWAS);
     message <- paste(numberOfMissingGenes," GWAS hit",if(numberOfMissingGenes > 1) "s" else "", "\nomitted",sep="")
     pushViewport(viewport(clip='off'));
     grid.text(message ,x=unit(1,'npc') + unit(1,'lines'), y=.5, just=c('left','center'),
@@ -1437,9 +1424,12 @@ panel.gwas <- function (
     );
     upViewport(1);
   }
+  
+  # Get rid of rows that we can't fit on the plot..
+  df0uniq = df0uniq[!df0uniq$idnum %in% omitIdx,]
 
   increment <- 1.0/rows;
-
+  
   yPos <- function(id,text=FALSE) {
     if (text) {
       return( unit( (rows-id2row[id]) * increment + 2/7*increment, "npc") )
@@ -1448,30 +1438,11 @@ panel.gwas <- function (
     }
   }
 
-  # grid.segments(
- #    x0 = multiplier + df0$start, 
- #    x1 = df0$stop, 
-  #   y0 = yPos(df0$idnum),
-  #   y1 = yPos(df0$idnum),
-  #   default.units = "native", 
-  #   gp = gpar(col = 'red', lwd=5, alpha = alpha)
-  # );
-
-  # grid.rect(
-  #   x = multiplier + df0$start, 
-  #   width = df0$width, 
-  #   just = "left", 
-  #   y = yPos(df0$idnum),
-  #   height = unit(height * increment, "npc"), 
-  #   default.units = "native", 
-  #   gp = gpar(fill = 'red', col = 'red', alpha = alpha)
-  # );
-
   df0uniq_rows = dim(df0uniq)[1];
   poly_y = sapply(df0uniq$idnum,yPos,text=FALSE);
   poly_y = as.vector(rbind(
     poly_y,
-    rep(1,df0uniq_rows))
+    rep(0.98,df0uniq_rows))
   ); # interlaces two vectors together
 
   grid.polyline(
@@ -1612,7 +1583,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   ));
 
   optRowsFinemap = panel.finemap(
-    regions=fmregions,
+    fmregions,
     rows=NULL,
     computeOptimalRows=TRUE,
     showPartial = args[['showPartialGenes']],
@@ -1661,10 +1632,8 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   popViewport(4);
 
   # OK.  Now we know how many rows to use and we can set up the layout we will actually use.
-  message(args[['gwrows']])
+  #message(args[['gwrows']])
 
-  # TODO: fix this so title takes up no space when title == '' or is.null(title)
-  # can easily be done by checking if title exists and specifying layout height as 0 if not
   pushViewport(viewport(
     layout = grid.layout(
       2+3+4+1+1+1+1,1+2, 
@@ -1797,8 +1766,10 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   for (i in groupIds) { 
     idx <- which(metal$group == i);
     gmetal <- metal[idx,];
+    
     colors <- args[['ldColors']][gmetal$group]; 
     colors[which(gmetal$pch %in% 21:25)] <- 'gray20';
+    
     grid.points(x=gmetal$pos,y=transformation(gmetal$P.value),
       pch=gmetal$pch,
       gp=gpar(
@@ -2016,7 +1987,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     );
 
     panel.finemap(
-      regions=fmregions,
+      fmregions,
       showPartial = args[['showPartialGenes']],
       shiftNames = args[['shiftGeneNames']],
       rows=args[['fmrows']], 
@@ -2074,22 +2045,55 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
 }  ## end zplot
 
+grid.extralog = function(dframe,fudge = 0.63,main = NULL) {
+  suppressPackageStartupMessages(suppressWarnings({ 
+    check = require("gridExtra") 
+  }));
+  
+  if (!check) {
+    warning("gridExtra not installed - skipping extra PDF pages for GWAS hits and fine-mapping regions");
+    return();
+  }
+  
+  # Number of rows we can fit per page using the default tableGrob settings. 
+  rows_per_page = floor(as.numeric(convertUnit(unit(1,'npc'),"lines","y")) * 0.6)
+  
+  # Chunk up the data frame into sections depending on how many rows can fit on a page. 
+  dframe$chunk = ceiling(1:dim(dframe)[1] / rows_per_page);
+  for (dc in unique(dframe$chunk)) {
+    # Chop off the chunk column. 
+    dsub = dframe[dframe$chunk == dc,(1:(dim(dframe)[2] - 1))];
+    
+    # Draw the table. 
+    grid.newpage();
+    grid.draw(tableGrob(
+      dsub,
+      show.rownames = F
+    ));
+    
+    # Draw title if provided. 
+    if (!is.null(main)) {
+      grid.text(main,0.5,unit(1,'npc') - unit(1,'lines'));
+    }
+  }
+}
+
 grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
-    labels=c("date");
-    values=c(date());
+  labels=c("date");
+  values=c(date());
 #    labels=c(labels,"working directory");
 #    values=c(values,getwd());
 
 #    labels=c(labels,"unit");
 #    values=c(values,args[['unit']]);
-    labels=c(labels,"build");
-    values=c(values,args[['build']]);
-    labels=c(labels,"display range");
-    values=c(values,paste( 'chr',args[['chr']],":",args[['start']], "-", args[['end']], " [",args[['startBP']],"-",args[['endBP']], "]",sep=""));
-    labels=c(labels,"hilite range");
-    values=c(values,paste( args[['hiStart']], "-", args[['hiEnd']], " [",args[['hiStartBP']],"-",args[['hiEndBP']], "]"));
-    labels=c(labels,"reference SNP");
-    values=c(values,args[['refsnp']]);
+  labels=c(labels,"build");
+  values=c(values,args[['build']]);
+  labels=c(labels,"display range");
+  values=c(values,paste( 'chr',args[['chr']],":",args[['start']], "-", args[['end']], " [",args[['startBP']],"-",args[['endBP']], "]",sep=""));
+  labels=c(labels,"hilite range");
+  values=c(values,paste( args[['hiStart']], "-", args[['hiEnd']], " [",args[['hiStartBP']],"-",args[['hiEndBP']], "]"));
+  labels=c(labels,"reference SNP");
+  values=c(values,args[['refsnp']]);
 
 #    labels=c(labels,"prefix");
 #    values=c(values,args[['prefix']]);
@@ -2100,48 +2104,63 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
     values=c(values,args[['reload']]);
   }
 
-    if(! is.null(args[['reload']]) || debug){
-        labels=c(labels,"data reloaded from");
-        values=c(values,args[['rdata']]);
-    }
+  if(! is.null(args[['reload']]) || debug){
+      labels=c(labels,"data reloaded from");
+      values=c(values,args[['rdata']]);
+  }
 
-    labels=c(labels,"number of SNPs plotted");
-    values=c(values,as.character(dim(metal)[1]));
+  labels=c(labels,"number of SNPs plotted");
+  values=c(values,as.character(dim(metal)[1]));
 
-    labels=c(labels,paste("max",args[['pvalCol']]));
+  labels=c(labels,paste("max",args[['pvalCol']]));
   maxIdx <- which.max(transformation(metal$P.value));
   maxName <- as.character(metal$MarkerName[maxIdx]);
   maxNegLogP <- transformation(metal$P.value[maxIdx]);
   maxPSci <- log2sci(-maxNegLogP)
-    values=c(values,paste(maxPSci," [", maxName ,"]",sep=""));
+  values=c(values,paste(maxPSci," [", maxName ,"]",sep=""));
 
-    labels=c(labels,paste("min",args[['pvalCol']]));
+  labels=c(labels,paste("min",args[['pvalCol']]));
   minIdx <- which.min(transformation(metal$P.value));
   minName <- as.character(metal$MarkerName[minIdx]);
   minNegLogP <- transformation(metal$P.value[minIdx]);
   minPSci <- log2sci(-minNegLogP)
-    values=c(values,paste(minPSci," [", minName ,"]",sep=""));
+  values=c(values,paste(minPSci," [", minName ,"]",sep=""));
 
   if (TRUE) { 
     oG <- omittedGenes;
     while (length(oG) > 0) {
-        labels=c(labels,"omitted Genes");
-        values=c(values,paste(oG[1:min(length(oG),3)],collapse=", "));
+      labels=c(labels,"omitted Genes");
+      values=c(values,paste(oG[1:min(length(oG),3)],collapse=", "));
+      oG <- oG[-(1:3)]
+    }
+    
+    oG <- omittedGWAS;
+    while (length(oG) > 0) {
+      labels=c(labels,"omitted GWAS Hits");
+      values=c(values,paste(oG[1:min(length(oG),2)],collapse=", "));
+      oG <- oG[-(1:3)]
+    }
+    
+    oG <- omittedFineMap;
+    while (length(oG) > 0) {
+      labels=c(labels,"omitted fine mapping");
+      values=c(values,paste(oG[1:min(length(oG),3)],collapse=", "));
       oG <- oG[-(1:3)]
     }
   }
+  
   if (TRUE) { 
     w <- warningMessages;
     while (length(w) > 0) {
-        labels=c(labels,"Warning");
-        values=c(values,w[1]);
+      labels=c(labels,"Warning");
+      values=c(values,w[1]);
       w <- w[-1]
     }
   }
 
-    labels=paste(labels, ":  ",sep='');
+  labels=paste(labels, ":  ",sep='');
 
-    if (ascii) {
+  if (ascii) {
     cat(paste(format(labels,width=20,justify="right"),values,sep=" ",collapse="\n"));
     cat('\n');
     cat('\nMake more plots at http://csg.sph.umich.edu/locuszoom/');
@@ -2154,7 +2173,7 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
       annotlabels <- c('no annotation','framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental');
       pch <- args[['annotPch']];
       annotlabels <- c(annotlabels[-1],annotlabels[1])
-      pch <- c(pch[-1],pch[1])
+      pch <- c(pch[-1],pch[1]):
       key <- simpleKey(text=annotlabels);
       key$points$pch=pch;
       key$points$col="navy";
@@ -2212,56 +2231,56 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
     cols <- args[['ldColors']]
     cols <- rep(cols, length=nb+2);
     rl <- ribbonLegend(
-        breaks=breaks,
-        cols=cols[2:(1+nb)],
-        gp=gpar(cex=args[['legendSize']],col=args[['frameColor']],alpha=args[['frameAlapha']])
-      );
+      breaks=breaks,
+      cols=cols[2:(1+nb)],
+      gp=gpar(cex=args[['legendSize']],col=args[['frameColor']],alpha=args[['frameAlapha']])
+    );
 
     if ( args[['legend']] %in% c('left','right') ) {
-        annotlabels <- c('no annotation','framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental');
-        pch <- args[['annotPch']];
-        annotlabels <- c(annotlabels[-1],annotlabels[1])
-        pch <- c(pch[-1],pch[1])
-        key <- simpleKey(text=annotlabels);
-        key$points$pch=pch;
-        key$points$col="navy";
-        key$points$fill="lightskyblue";
-        keyGrob <- draw.key(key,draw=FALSE);
-        annotationBoxTop <- unit(0.95,'npc');
-        annotationBoxHeight <- unit(3,"lines") + grobHeight(keyGrob);
-        pushViewport(viewport(name='legendVpPage2',
-          x=unit(.9,'npc'),
-          y=annotationBoxTop - annotationBoxHeight - unit(2,'lines'),
-          just=c('right','top'),
-          width=unit(4,'char'),
-          height=unit(8,'lines')
-        ));
-        grid.rect(gp=gpar(col='transparent',fill='white',alpha=args[['legendAlpha']]));
-        grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+      annotlabels <- c('no annotation','framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental');
+      pch <- args[['annotPch']];
+      annotlabels <- c(annotlabels[-1],annotlabels[1])
+      pch <- c(pch[-1],pch[1])
+      key <- simpleKey(text=annotlabels);
+      key$points$pch=pch;
+      key$points$col="navy";
+      key$points$fill="lightskyblue";
+      keyGrob <- draw.key(key,draw=FALSE);
+      annotationBoxTop <- unit(0.95,'npc');
+      annotationBoxHeight <- unit(3,"lines") + grobHeight(keyGrob);
+      pushViewport(viewport(name='legendVpPage2',
+        x=unit(.9,'npc'),
+        y=annotationBoxTop - annotationBoxHeight - unit(2,'lines'),
+        just=c('right','top'),
+        width=unit(4,'char'),
+        height=unit(8,'lines')
+      ));
+      grid.rect(gp=gpar(col='transparent',fill='white',alpha=args[['legendAlpha']]));
+      grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
 
-        pushViewport(viewport(name='ribbonLegendPage2',
-          y=0,
-          just=c('center','bottom'),
-          width=unit(4,'char'),
-          height=unit(7,'lines')
-        ))
-        grid.draw(rl);
-        upViewport(1);
+      pushViewport(viewport(name='ribbonLegendPage2',
+        y=0,
+        just=c('center','bottom'),
+        width=unit(4,'char'),
+        height=unit(7,'lines')
+      ))
+      grid.draw(rl);
+      upViewport(1);
 
-        pushViewport(viewport(name='LDTitlePage2',
-          clip="off", 
-          width=unit(4,"char"),
-          y=unit(1,'npc') - unit(.25,'char'),
-          just=c('center','top'),
-          height=unit(1,'lines')
-        ))
-        grid.text(args[['LDTitle']], gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
-        upViewport(1);
+      pushViewport(viewport(name='LDTitlePage2',
+        clip="off", 
+        width=unit(4,"char"),
+        y=unit(1,'npc') - unit(.25,'char'),
+        just=c('center','top'),
+        height=unit(1,'lines')
+      ))
+      grid.text(args[['LDTitle']], gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+      upViewport(1);
 
-        upViewport(1);
+      upViewport(1);
     }
 
-    grid.text('Make more plots at http://csg.sph.umich.edu/locuszoom/', y=unit(1,'lines'), just=c('center','bottom'));
+  grid.text('Make more plots at http://csg.sph.umich.edu/locuszoom/', y=unit(1,'lines'), just=c('center','bottom'));
   }
 }
 
@@ -2378,8 +2397,7 @@ default.args <- list(
   rugAlpha = 1,                         # alpha for snpset rugs
   metalRug = NULL,                      # if not null, use as label for rug of metal positions
   refFlat = NULL,                       # use this file with refFlat info (instead of pquery)
-  fineMapPP = NULL,                     # give a file with fine mapping posterior probabilities
-  fineMapRegions = NULL,                # give a file with fine mapping regions (already computed from posterior)
+  fineMap = NULL,                       # give a file with fine mapping posterior probabilities
   gwasHits = NULL,                      # give a file with GWAS catalog hits (chr, pos, trait)
   showIso=FALSE,                        # show each isoform of gene separately
   showRecomb = TRUE,                    # show recombination rate?
@@ -2811,46 +2829,49 @@ if ( is.null(args[['reload']]) ) {
     metal$group <- 1;
     metal$LD <- NA;
     metal$ldcut <- NA;
-      metal$group[metal$MarkerName == refSnp] <- length(args[['ldColors']]);
+    metal$group[metal$MarkerName == refSnp] <- length(args[['ldColors']]);
     if (! is.null(ld)) {
-        # subset ld for reference SNP
-        snpCols <- which(apply(ld,2,Sniff,type="snp"))
-        if (length(snpCols) != 2) {
-        warning(paste("LD file doesn't smell right. (",
-              length(snpCols)," SNP cols)",sep=""))
-        assign("warningMessages",
-          c(warningMessages,"LD file doesn't smell right."), 
-          globalenv());
+      # subset ld for reference SNP
+      snpCols <- which(apply(ld,2,Sniff,type="snp"))
+      if (length(snpCols) != 2) {
+        warning(paste("LD file doesn't smell right. (",length(snpCols)," SNP cols)",sep=""))
+        assign("warningMessages",c(warningMessages,"LD file doesn't smell right."), globalenv());
         break;
-        }
-        w1 <- which ( ld[,snpCols[1]] == refSnp );
-        w2 <- which ( ld[,snpCols[2]] == refSnp );
-        c1 <- c(names(ld)[snpCols[1]],names(ld)[snpCols[2]],args[['ldCol']]); # "rsquare","dprime");
-        c2 <- c(names(ld)[snpCols[2]],names(ld)[snpCols[1]],args[['ldCol']]); # "rsquare","dprime");
-        ld1 <- ld[ w1, c1, drop=FALSE ]
-        ld2 <- ld[ w2, c2, drop=FALSE ]
-        names(ld1)[1:2] <- c("refSNP","otherSNP")
-        names(ld2)[1:2] <- c("refSNP","otherSNP")
-        lld <- rbind( ld1, ld2);
-        if (prod(dim(lld)) > 0) { 
-            metal <- merge(metal, lld,  
-              by.x='MarkerName', by.y="otherSNP",
-              all.x=TRUE, all.y=FALSE);
-            if ( args[['ldCol']] %in% names(metal) ) {
-              metal$LD <- metal[ ,args[['ldCol']] ];
-            } else {
-              stop(paste('No column named',args[['ldCol']]));
-            }
-            metal$ldcut <- cut(metal$LD,breaks=args[['ldCuts']],include.lowest=TRUE);
-            metal$group <- 1 + as.numeric(metal$ldcut);
-            metal$group[is.na(metal$group)] <- 1;
-            metal$group[metal$MarkerName == refSnp] <- length(args[['ldColors']]) 
+      }
+      
+      w1 <- which ( ld[,snpCols[1]] == refSnp );
+      w2 <- which ( ld[,snpCols[2]] == refSnp );
+      c1 <- c(names(ld)[snpCols[1]],names(ld)[snpCols[2]],args[['ldCol']]); # "rsquare","dprime");
+      c2 <- c(names(ld)[snpCols[2]],names(ld)[snpCols[1]],args[['ldCol']]); # "rsquare","dprime");
+      ld1 <- ld[ w1, c1, drop=FALSE ]
+      ld2 <- ld[ w2, c2, drop=FALSE ]
+      names(ld1)[1:2] <- c("refSNP","otherSNP")
+      names(ld2)[1:2] <- c("refSNP","otherSNP")
+      lld <- rbind( ld1, ld2);
+      
+      if (prod(dim(lld)) > 0) { 
+        metal <- merge(metal, lld,  
+          by.x='MarkerName', by.y="otherSNP",
+          all.x=TRUE, all.y=FALSE
+        );
+        
+        if ( args[['ldCol']] %in% names(metal) ) {
+          metal$LD <- metal[ ,args[['ldCol']] ];
         } else {
-          assign("warningMessages",c(warningMessages,'No usable LD information for reference SNP.'), globalenv());
-          warning("No usable LD information.");
-          args[['legend']] <- 'none';
+          stop(paste('No column named',args[['ldCol']]));
         }
+        
+        metal$ldcut <- cut(metal$LD,breaks=args[['ldCuts']],include.lowest=TRUE);
+        metal$group <- 1 + as.numeric(metal$ldcut);
+        metal$group[is.na(metal$group)] <- 1;
+        metal$group[metal$MarkerName == refSnp] <- length(args[['ldColors']]) 
+      } else {
+        assign("warningMessages",c(warningMessages,'No usable LD information for reference SNP.'), globalenv());
+        warning("No usable LD information.");
+        args[['legend']] <- 'none';
+      }
     }
+    
     save(metal,refSnp,args,file='temp.Rdata');
 
     command <- paste("pquery refFlat_in_region",
@@ -2881,12 +2902,8 @@ if ( is.null(args[['reload']]) ) {
 
     # load fine mapping data
     fmregions = NULL;
-    if (!is.null(args[['fineMapRegions']])) {
-      fmregions = LoadFineMapRegions(args[['fineMapRegions']]);
-    } else {
-      if (!is.null(args[['fineMapPP']])) {
-        fmregions = LoadFineMapPP(args[['fineMapPP']]);
-      }
+    if (!is.null(args[['fineMap']])) {
+      fmregions = LoadFineMap(args[['fineMap']]);
     }
 
     # subset fine mapping regions to plotting region
@@ -2903,7 +2920,8 @@ if ( is.null(args[['reload']]) ) {
 
     # subset gwas hits to plotting region
     if (!is.null(gwas_hits)) {
-      gwas_hits = subset(gwas_hits,chr == args[['chr']]);
+      s_gwas = (gwas_hits$chr == args[['chr']]) & (gwas_hits$pos <= args[['endBP']] / 1E6) & (gwas_hits$pos >= args[['startBP']] / 1E6);
+      gwas_hits = subset(gwas_hits,s_gwas);
     }
     summary(gwas_hits);
 
@@ -2947,10 +2965,10 @@ if (args[['experimental']]) {
   recrate$recomb <- max(c(100,recrate$recomb),na.rm=T) - recrate$recomb;
   recrateRange <- c(0,max(c(100,recrate$recomb),na.rm=T));
 }
-
 recrateRange <- rev(recrateRange);
 print("recrateRange: ");
 print(recrateRange);
+
 refSnp <- as.character(args[['refsnp']]);
 refidx <- match(refSnp, metal$MarkerName);
 if (!args[['showRefsnpAnnot']]) {
@@ -2958,15 +2976,33 @@ if (!args[['showRefsnpAnnot']]) {
 }
 
 if ('pdf' %in% args[['format']]) {
-    pdf(file=args[['pdf']],width=args[['width']],height=args[['height']],version='1.4');
-    if ( prod(dim(metal)) == 0 ) { 
-        message ('No data to plot.'); 
-    } else {
-        zplot(metal,ld,recrate,refidx,nrugs=nrugs,args=args,postlude=args[['postlude']]);
-        grid.newpage();
-    }
-    grid.log(args,metal);
-    dev.off();
+  pdf(file=args[['pdf']],width=args[['width']],height=args[['height']],version='1.4');
+  
+  if ( prod(dim(metal)) == 0 ) { 
+    message ('No data to plot.'); 
+  } else {
+    zplot(metal,ld,recrate,refidx,nrugs=nrugs,args=args,postlude=args[['postlude']]);
+    grid.newpage();
+  }
+  
+  # Arguments, annotation key, website link. Even if a plot wasn't created. 
+  grid.log(args,metal);
+  
+  # GWAS catalog hits within the plotting region (if provided.) 
+  if (!is.null(gwas_hits)) {
+    gwas_hits = gwas_hits[order(gwas_hits$pos),];
+    gwas_hits = change_names(gwas_hits, list('pos' = "pos (Mb)"));
+    grid.extralog(gwas_hits,main = "GWAS Catalog SNPs in Region");
+  }
+  
+  # Fine-mapping data. 
+  if (!is.null(fmregions)) {
+    fmregions = fmregions[order(fmregions$pos),];
+    fmregions = change_names(fmregions, list('pos' = "pos (Mb)"));
+    grid.extralog(fmregions,main = "Fine-mapping Regions");
+  }
+  
+  dev.off();
 } 
 
 #
