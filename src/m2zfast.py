@@ -528,27 +528,40 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
   return (found_in_region,output_file,min_snp);
 
 # Runs the R script which actually generates the plot. 
-def runM2Z(metal,metal2zoom_path,ld_file,refsnp,chr,start,end,no_snp_name,verbose,args=""):
+def runM2Z(metal,metal2zoom_path,ld_files,refsnp,chr,start,end,no_snp_name,verbose,opts,args=""):
   conf = getConf();
 
   rscript_path = find_systematic(conf.RSCRIPT_PATH);
 
   # If no LD file was created, make m2z use the database instead. 
-  if ld_file == None:
-    ld_file = "NULL";
+  if ld_files == None:
+    refsnp_ld = "NULL";
+    cond_ld = "";
+  else:
+    refsnp_ld = ld_files[0];
+    cond_ld = "cond_ld=" + ",".join(ld_files[1:]);
+  
+  cond_pos = "";
+  cond_snps = "";
+  if opts.condsnps != None:
+    cond_pos = "cond_pos=" + ",".join(map(lambda x: x.chrpos,opts.condsnps));
+    cond_snps = "cond_snps=" + ",".join(map(lambda x: x.snp,opts.condsnps));
 
   if no_snp_name:
     refsnpName = r'" "';
   else:
     refsnpName = refsnp.snp;
 
-  com = "%s %s metal=%s clobber=F clean=F refsnp=%s refsnpName=%s ld=%s chr=%s start=%s end=%s %s" % (
+  com = "%s %s metal=%s clobber=F clean=F refsnp=%s refsnpName=%s ld=%s %s %s %s chr=%s start=%s end=%s %s" % (
     rscript_path,
     metal2zoom_path,
     metal,
     refsnp.chrpos,
     refsnpName,
-    ld_file,
+    refsnp_ld,
+    cond_ld,
+    cond_pos,
+    cond_snps,
     str(chr),
     str(start),
     str(end),
@@ -779,6 +792,9 @@ def printOpts(opts):
     'no_clean','no_transform','verbose','m2zpath','plotonly'
   );
   
+  cond_snps = [str(i) for i in opts.condsnps];
+  table.add_row(['condsnps',",".join(cond_snps)]);
+
   for opt in display_opts:
     val = getattr(opts,opt);
     if val != None and val:
@@ -827,6 +843,7 @@ def getSettings():
   parser.add_option("--cache",dest="cache",help="Change the location of the cache file to use for LD. Set to 'None' to disable.");
   parser.add_option("--hitspec",dest="hitspec",help="File containing a list of SNPs, chromosome, start, and stop.");
   parser.add_option("--refsnp",dest="refsnp",help="Create region plot around this reference SNP.");
+  parser.add_option("--conditional",dest="condsnps",help="Designate conditional / second signal SNPs.");
   parser.add_option("--refgene",dest="refgene",help="Create region plot flanking a gene.");
   parser.add_option("--flank",dest="flank",help="Distance around refsnp to plot.");
   parser.add_option("--chr",dest="chr",help="Chromosome that refsnp is located on - this is only used for sanity checking, but it is good to include.");
@@ -1019,6 +1036,23 @@ def getSettings():
     opts.refsnp.chrpos = "chr%s:%s" % (chr,pos);
     opts.refsnp.chr = chr;
     opts.refsnp.pos = pos;
+
+  # If the user specified conditional / second signal SNPs, parse these into chr/pos. 
+  if opts.condsnps:
+    cond_snps = [i.strip() for i in opts.condsnps.split(",")];
+    cond_snps_chrpos = list();
+    for csnp in cond_snps:
+      csnp = SNP(snp=csnp);
+      csnp.tsnp = transSNP(csnp.snp,opts.sqlite_db_file);
+      (csnp_chr,csnp_pos) = find_pos(csnp.tsnp);
+
+      csnp.chr = csnp_chr;
+      csnp.pos = csnp_pos;
+      csnp.chrpos = "chr%s:%s" % (csnp_chr,csnp_pos);
+
+      cond_snps_chrpos.append(csnp);
+
+    opts.condsnps = cond_snps_chrpos;
 
   # Compute start/end positions for each SNP, unless already specified and in refsnp mode.
   opts.snplist = [];
@@ -1400,7 +1434,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
     if not no_clean:
       print "Deleting temporary files.."
       cleanup([ld_temp,metal_temp]);
-    return; # hack
+    return; 
   
   # Should we calculate LD? 
   if not opts.no_ld:
@@ -1409,11 +1443,23 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       print "Using user-specified LD file..";
       opts.ld = fixUserLD(opts.ld,refsnp,opts.sqlite_db_file);
       if opts.ld == None:
-        return; # hack.. but this whole script is a giant hack anyway. 
+        return; 
     else:
-      print "Finding pairwise LD with %s.." % str(refsnp);
+      print "Finding pairwise LD with reference SNP %s.." % str(refsnp);
       print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
+      
+      ld_files = [];
       ld_temp = computeLD(refsnp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
+      if ld_temp != None:
+        ld_files.append(ld_temp);
+
+      for cond_snp in opts.condsnps:
+        print "Finding pairwise LD with conditional SNP %s.." % str(cond_snp);
+        print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
+        ld_temp = computeLD(cond_snp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
+        if ld_temp != None:
+          ld_files.append(ld_temp);
+
   else:
     print "Skipping LD computations, --no-ld was given..";
     ld_temp = "NULL";
@@ -1442,8 +1488,8 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       args += " %s=NULL" % m2zarg;
 
   print "Creating plot..";
-  ld_file = opts.ld if opts.ld != None else ld_temp;
-  runM2Z(metal_temp,opts.metal2zoom_path,ld_file,refsnp,chr,start,end,opts.no_snp_name,opts.verbose,args);
+  ld_final = opts.ld if opts.ld != None else ld_files;
+  runM2Z(metal_temp,opts.metal2zoom_path,ld_final,refsnp,chr,start,end,opts.no_snp_name,opts.verbose,opts,args);
 
   if not no_clean:
     print "Deleting temporary files.."
