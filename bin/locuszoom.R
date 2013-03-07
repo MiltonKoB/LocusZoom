@@ -1593,7 +1593,10 @@ panel.gwas <- function (
   rows <- min(requestedRows,optRows);
 
   if (optRows > requestedRows && as.logical(args[['warnMissingGWAS']])) {
+    # Get rid of rows that we can't fit on the plot..
     omitIdx <- which(id2row > rows)
+    df0uniq = df0uniq[!df0uniq$idnum %in% omitIdx,]
+    
     assign("omittedGWAS",as.character(df0uniq$name[omitIdx]),globalenv())
     numberOfMissingGenes <- length(omittedGWAS);
     message <- paste(numberOfMissingGenes," GWAS hit",if(numberOfMissingGenes > 1) "s" else "", "\nomitted",sep="")
@@ -1604,9 +1607,6 @@ panel.gwas <- function (
     upViewport(1);
   }
   
-  # Get rid of rows that we can't fit on the plot..
-  df0uniq = df0uniq[!df0uniq$idnum %in% omitIdx,]
-
   increment <- 1.0/rows;
   
   yPos <- function(id,text=FALSE) {
