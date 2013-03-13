@@ -490,7 +490,7 @@ AdjustModesOfArgs <- function(args) {
           'frameAlpha','hiAlpha','rugAlpha',
           'refsnpLineAlpha', 'recombFillAlpha','recombLineAlpha', 'refsnpTextAlpha', 'refsnpLineWidth',
           'ymin','ymax','legendSize','refsnpTextSize','axisSize','axisTextSize','geneFontSize','smallDot',
-          'largeDot','refDot','signifLine'),
+          'largeDot','refDot','signifLine','ldThresh'),
         as.numeric);
 
     args <- sublapply(args,
@@ -498,18 +498,26 @@ AdjustModesOfArgs <- function(args) {
         as.filename);
 
     args <- sublapply(args,
-        c('chr','unit','xnsmall','fmrows','gwrows'),
+        c('chr','unit','xnsmall','fmrows','gwrows','condRefsnpPch'),
         as.integer);
 
     args <- sublapply(args,
-        c('experimental','clobber','recombOver','recombFill','pquery',
+        c('condLdLow'),
+        as.character);
+    
+    args <- sublapply(args,
+        c('experimental','clobber','recombOver','recombFill','pquery','drawMarkerNames',
           'showRecomb','showAnnot','showRefsnpAnnot','bigDiamond','showPartialGenes','shiftGeneNames',
           'clean', 'dryRun','legendMissing'),
         as.logical);
 
     args <- sublapply( args,
-        c('ldCuts','xat','yat','annotPch'),
+        c('ldCuts','xat','yat','annotPch','condPch'),
         function(x) { as.numeric(unlist(strsplit(x,","))) } );
+    
+    args <- sublapply( args,
+        c('condLdColors'),
+        function(x) { as.character(unlist(strsplit(x,","))) } );
 
     if (!is.null(args[['weightRange']])) {
       args <- sublapply( args,
@@ -729,58 +737,27 @@ flatten.bed <- function(x,multiplier=.001) {
     invisible(df);
 }
 
+grid.refsnp <- function(name,pos,pval,draw.name=TRUE) {
 
-#############################################################
-#
-# display reference SNP name and vertical line
-#
-grid.refsnp <- function(name,pos) {
-
-  grid.text(
-    as.character(name),
-    x=unit(pos,"native"), 
-    y=unit(.95,'npc'), 
-    just=c("center","top"),
-    gp=gpar(
-      cex=args[['refsnpTextSize']],
-      col=args[['refsnpTextColor']],
-      alpha=args[['refsnpTextAlpha']]
-    )
-  );
+  if (draw.name) {
+    grid.text(
+      as.character(name),
+      x=unit(pos,"native"), 
+      y=unit(pval,'native') + unit(0.075,'npc'), 
+      just=c("center","top"),
+      gp=gpar(
+        cex=args[['refsnpTextSize']],
+        col=args[['refsnpTextColor']],
+        alpha=args[['refsnpTextAlpha']]
+      )
+    );
+  }
   
   grid.segments(
     x0=unit(pos,"native"),
     x1=unit(pos,"native"),
     y0=unit(0,"npc"),
-    y1=unit(1,'npc') - unit(2,"lines"),
-    gp=gpar(
-      col=args[['refsnpLineColor']],
-      lwd=args[['refsnpLineWidth']],
-      alpha=args[['refsnpLineAlpha']],
-      lty=args[['refsnpLineType']]
-    )
-  );
-}
-
-grid.condsnp <- function(name,pos,pval) {
-
-  grid.text(
-    as.character(name),
-    x=unit(pos,"native"), 
-    y=unit(pval,'native') + unit(0.075,'npc'), 
-    just=c("center","top"),
-    gp=gpar(
-      cex=args[['refsnpTextSize']],
-      col=args[['refsnpTextColor']],
-      alpha=args[['refsnpTextAlpha']]
-    )
-  );
-  
-  grid.segments(
-    x0=unit(pos,"native"),
-    x1=unit(pos,"native"),
-    y0=unit(0,"npc"),
-    y1=unit(pval,'native') + unit(0.025,'npc'),
+    y1=unit(pval,'native'),
     gp=gpar(
       col=args[['refsnpLineColor']],
       lwd=args[['refsnpLineWidth']],
@@ -867,7 +844,7 @@ panel.hilite <- function(range=c(lo,hi),lo,hi,col="transparent",fill="blue",alph
         );
 }
 
-multiRibbonLegend = function(strings,ld_cuts,hues,sat_range,gp = NULL) { 
+multiRibbonLegend = function(strings,ld_cuts,ld_colors,gp = NULL) { 
   max_str_width = max(sapply(strings,function(x) convertUnit(stringWidth(x),'npc')));
   max_str_width = unit(max_str_width,'npc');
   
@@ -914,7 +891,9 @@ multiRibbonLegend = function(strings,ld_cuts,hues,sat_range,gp = NULL) {
   rect_x = rep(head(ld_cuts_npc,-1),length(strings));
   rect_y = unlist(sapply(seq(0.5,1.5 * length(strings), 1.5),rep,length(ld_cuts)-1,simplify=F));
   
-  cols = unlist(Map(function(x) { hsv(h = x,s = sat_range)},hues))
+  #cols = unlist(Map(function(x) { hsv(h = x,s = sat_range)},hues))
+  
+  cols = unlist(sapply(strings,function(x) ld_colors[[x]],simplify=F));
   
   glist = gList(
     rectGrob(
@@ -1694,7 +1673,9 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     if (! is.null(args[['refDot']]) ) {
       dotSizes[refidx] <- args[['refDot']];
     } 
-  } 
+  }
+  
+  metal$dotSizes = dotSizes; 
   
   if ( is.null(args[['refDot']]) ) {
      # this avoids problems downstream, but dotSize[refidx] has already been set in most cases.
@@ -1955,16 +1936,33 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     }
   } else {
     # Draw SNPS with LD colors based on their best (reference, conditional) SNP. 
+    by(metal,metal$best_ld_cut,function(submetal) {  
+      # All SNPs that have LD. 
+      grid.points(
+        x = submetal$pos,
+        y = transformation(submetal$P.value),
+        pch = submetal$pch,
+        gp=gpar(
+          cex = submetal$dotSizes, 
+          col = submetal$ld_color,
+          fill = submetal$ld_color
+        )
+      );
+    });
+
+    # Plot reference/conditional SNPs last so they are on top. 
+    metal_ref = metal[metal$MarkerName %in% ref_cond_snps,];
     grid.points(
-      x = metal$pos,
-      y = transformation(metal$P.value),
-      pch = metal$pch,
+      x = metal_ref$pos,
+      y = transformation(metal_ref$P.value),
+      pch = metal_ref$pch,
       gp=gpar(
-        cex = dotSizes, 
-        col = metal$ld_color,
-        fill = metal$ld_color
+        cex = metal_ref$dotSizes, 
+        col = metal_ref$ld_color,
+        fill = metal_ref$ld_color
       )
-    ); 
+    );
+    
   }
   
   # Draw label for reference SNP. 
@@ -1972,10 +1970,10 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   if (! is.null(refidx)) {
     if (!is.null(args[['refsnpName']])) {
       # User-provided refsnp label. 
-      grid.refsnp(name=args[['refsnpName']],pos=metal$pos[refidx]);
+      grid.refsnp(args[['refsnpName']],metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
     } else{
       # Use the actual SNP name. 
-      grid.refsnp(name=refSnp,pos=metal$pos[refidx]);
+      grid.refsnp(refSnp,metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
     }
   }
   
@@ -2002,7 +2000,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
           # alpha=args[['refsnpTextAlpha']]
         # )
       # );
-      grid.condsnp(csnp_name,csnp_data$pos,csnp_pval);
+      grid.refsnp(csnp_name,csnp_data$pos,csnp_pval,args[['drawMarkerNames']]);
     }
   }
     
@@ -2475,7 +2473,7 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
       grid.text('Annotation key',x=.5,y=unit(1,'npc') - unit(1,'lines'),just=c('center','top'))
       popViewport();
     } 
-    if ( 'annot' %in% names(metal) && args[['showAnnot']] ) {
+    if ( 'annot' %in% names(metal) && args[['showAnnot']] && is.null(cond_ld) ) {
       annotlabels <- levels(as.factor(metal$annot))
       pch <- rep(args[['annotPch']],length=length(annotlabels));
       key <- simpleKey(text=annotlabels);
@@ -2510,17 +2508,6 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
       popViewport();
     } }
 
-    breaks <- union(args[['ldCuts']],c(0,1));
-    breaks <- sort(unique(breaks));
-    nb <- length(breaks);
-    cols <- args[['ldColors']]
-    cols <- rep(cols, length=nb+2);
-    rl <- ribbonLegend(
-      breaks=breaks,
-      cols=cols[2:(1+nb)],
-      gp=gpar(cex=args[['legendSize']],col=args[['frameColor']],alpha=args[['frameAlapha']])
-    );
-
     if ( args[['legend']] %in% c('left','right') ) {
       annotlabels <- c('no annotation','framestop','splice','nonsyn','coding','utr','tfbscons','mcs44placental');
       pch <- args[['annotPch']];
@@ -2533,6 +2520,7 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
       keyGrob <- draw.key(key,draw=FALSE);
       annotationBoxTop <- unit(0.95,'npc');
       annotationBoxHeight <- unit(3,"lines") + grobHeight(keyGrob);
+      
       pushViewport(viewport(name='legendVpPage2',
         x=unit(.9,'npc'),
         y=annotationBoxTop - annotationBoxHeight - unit(2,'lines'),
@@ -2543,24 +2531,37 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
       grid.rect(gp=gpar(col='transparent',fill='white',alpha=args[['legendAlpha']]));
       grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
 
-      pushViewport(viewport(name='ribbonLegendPage2',
-        y=0,
-        just=c('center','bottom'),
-        width=unit(4,'char'),
-        height=unit(7,'lines')
-      ))
-      grid.draw(rl);
-      upViewport(1);
+      if (is.null(args[['cond_ld']])) {
+        breaks <- union(args[['ldCuts']],c(0,1));
+        breaks <- sort(unique(breaks));
+        nb <- length(breaks);
+        cols <- args[['ldColors']]
+        cols <- rep(cols, length=nb+2);
+        rl <- ribbonLegend(
+          breaks=breaks,
+          cols=cols[2:(1+nb)],
+          gp=gpar(cex=args[['legendSize']],col=args[['frameColor']],alpha=args[['frameAlapha']])
+        );
+      
+        pushViewport(viewport(name='ribbonLegendPage2',
+          y=0,
+          just=c('center','bottom'),
+          width=unit(4,'char'),
+          height=unit(7,'lines')
+        ))
+        grid.draw(rl);
+        upViewport(1);
 
-      pushViewport(viewport(name='LDTitlePage2',
-        clip="off", 
-        width=unit(4,"char"),
-        y=unit(1,'npc') - unit(.25,'char'),
-        just=c('center','top'),
-        height=unit(1,'lines')
-      ))
-      grid.text(args[['LDTitle']], gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
-      upViewport(1);
+        pushViewport(viewport(name='LDTitlePage2',
+          clip="off", 
+          width=unit(4,"char"),
+          y=unit(1,'npc') - unit(.25,'char'),
+          just=c('center','top'),
+          height=unit(1,'lines')
+        ))
+        grid.text(args[['LDTitle']], gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+        upViewport(1);
+      }
 
       upViewport(1);
     }
@@ -2633,11 +2634,12 @@ default.args <- list(
   requiredGene = NULL,                  # gene name (string)
   refsnp = NULL,                        # snp name (string)
   refsnpName = NULL,                    # name given to refsnp on plot (usually same as refsnp)
+  drawMarkerNames = TRUE,               # draw the rs# SNP names above them?
   refsnpTextColor = "black",            # color for ref snp label
   refsnpTextSize = 1,                   # sclaing factor for text size
   refsnpTextAlpha = 1,                  # alpha for ref snp label
   refsnpLineColor = "transparent",      # color for ref snp line (invisible by default)
-  refsnpLineAlpha = .5,                 # alpha for ref snp line
+  refsnpLineAlpha = 1,                 # alpha for ref snp line
   refsnpLineWidth = 1,                  # width of ref snp line
   refsnpLineType = 2,                   # type of ref snp line (2 = dashed, 1 = solid, etc.. R defaults)
   signifLine = NULL,                    # draw a horizontal line at significance threshold (specify in p-value scale)
@@ -2658,14 +2660,19 @@ default.args <- list(
   showAnnot=TRUE,                       # show annotation for each snp?
   showGenes=TRUE,                       # show genes?
   annotCol='annotation',                # column to use for annotation, if it exists
-  annotPch='24,24,25,22,22,8,7,21,1',   # plot symbols for annotation
+  annotPch='24,24,25,22,22,8,7,21,1',        # plot symbols for annotation
+  condPch='4,16,17,15,25,8,7,13,12,9,10',    # plot symbols for groups of LD blocks of SNPs
+  condRefsnpPch=23,                     # symbol to use for refsnps in conditional plot, NULL means use same symbol as other SNPs in group
   annotOrder=NULL,                      # ordering of annotation classes
   showRefsnpAnnot=TRUE,                 # show annotation for reference snp too?
   bigDiamond=FALSE,                     # put big diamond around refsnp?
   ld=NULL,                              # file for LD information for reference SNP
   cond_ld=NULL,                         # files for LD information for conditional SNPs
   ldCuts = "0,.2,.4,.6,.8,1",           # cut points for LD coloring
-  ldColors = "gray50,navy,lightskyblue,green,orange,red,purple3",  # colors for LD
+  ldThresh=NULL,                        # LD values below this threshold will be colored identically
+  ldColors = "gray60,navy,lightskyblue,green,orange,red,purple3",                   # colors for LD on original LZ plots
+  condLdColors = "gray60,#E41A1C,#377EB8,#4DAF4A,#984EA3,#FF7F00,#A65628,#F781BF",  # colors for conditional LD plots (red, blue, green, purple, orange)
+  condLdLow = NULL,                     # color all SNPs with conditional LD in the lowest bin the same color (specify that color here)
   ldCol='rsquare',                      # name for LD column
   LDTitle=NULL,                         # title for LD legend
   smallDot = .4,                        # smallest p-value cex 
@@ -3191,38 +3198,71 @@ if ( is.null(args[['reload']]) ) {
     # Merge into metal. 
     metal = merge(metal,best_ld,by.x="MarkerName",by.y="snp",all.x=TRUE,all.y=FALSE);
     
+    # Ref/conditional SNPs are in "best LD" with themselves. 
+    metal[match(ref_cond_snps,metal$MarkerName),]$best_ld_snp = ref_cond_snps;
+    metal[match(ref_cond_snps,metal$MarkerName),]$best_ld = 1;
+    
+    # Did the user choose to threshold LD? 
+    threshold_cuts = function(ld_cuts,thresh) { 
+      ld_cuts = as.numeric(ld_cuts);
+      ld_cuts = ld_cuts[!ld_cuts <= thresh];
+      c(0,thresh,ld_cuts);
+    }
+    
+    if (!is.null(args[['ldThresh']])) {
+      args[['ldCuts']] = threshold_cuts(args[['ldCuts']],args[['ldThresh']]);
+    }
+    
     # Break up best LD into bins. 
+    num_ld_bins = length(args[['ldCuts']]) - 1;
     metal$best_ld_cut = cut(metal$best_ld,breaks=args[['ldCuts']],include.lowest=TRUE);
     metal$best_ld_cut = 1 + as.numeric(metal$best_ld_cut);
     metal$best_ld_cut[is.na(metal$best_ld_cut)] = 1;
-    
+   
     # Each SNP belongs to a group, which is the SNP it has highest LD with. 
-    metal$best_ld_group = as.numeric(as.factor(metal$best_ld_snp)) + 1;
+    metal$best_ld_group = as.numeric(factor(metal$best_ld_snp,levels=ref_cond_snps)) + 1;
     metal$best_ld_group[is.na(metal$best_ld_group)] = 1;
+        
+    # Compute each SNP's color. 
+    metal$ld_color_base = args[['condLdColors']][metal$best_ld_group];
     
-    # Missing LD color. 
-    ld_miss_hsv = list(h = 0, s = 0, v = 0.8);
+    col_pick = function(x,num_bins,low_color=NULL) { 
+      cols = c(
+        args[['condLdColors']][1],
+        tail(colorRampPalette(c("white",x))(num_bins + 1),-1) 
+      );
+
+      if (!is.null(low_color)) {
+        cols[2] = low_color; # cols[1] is missing LD, cols[2] is lowest LD bin
+      }
+
+      cols;
+    };
     
-    # Assign colors (hues) to each SNP. 
-    hues = head(seq(0,1,1 / length(ref_cond_snps)),-1);
-    metal$hsv_hue = c(ld_miss_hsv$h,hues)[metal$best_ld_group];
+    # Assign colors to SNPs based on their best LD.  
+    metal$ld_color = apply(metal,1,function(x) { 
+      this_cut = as.numeric(x['best_ld_cut']);
+      col_pick(x['ld_color_base'],num_ld_bins,args[['condLdLow']])[this_cut];
+    });
     
-    # Assign values. 
-    metal$hsv_value = 1;
-    metal$hsv_value[is.na(metal$best_ld)] = ld_miss_hsv$v;
-    
-    # Assign color saturation (gradient) based on LD bin. 
-    sat_range = head(seq(0.1,1,1 / length(args[['ldCuts']])),-1);
-    metal$hsv_sat = c(ld_miss_hsv$s,sat_range)[metal$best_ld_cut];
-    
-    # Generate colors for each SNP. 
-    metal$ld_color = hsv(h = metal$hsv_hue, s = metal$hsv_sat, v = metal$hsv_value);
-    
+    # Collect colors together for LD ribbon legend. 
+    base_colors = args[['condLdColors']][seq(2,length(ref_cond_snps)+1)]
+    cond_ld_colors = sapply(base_colors,function(x) tail(col_pick(x,num_ld_bins,args[['condLdLow']]),-1),simplify=F);
+    names(cond_ld_colors) = ref_cond_snps_names;
+
     # Color the ref/cond SNPs a different color so they stand out. 
-    metal$ld_color[metal$MarkerName %in% ref_cond_snps] = tail(args[['ldColors']],1);
+    #metal$ld_color[metal$MarkerName %in% ref_cond_snps] = tail(args[['ldColors']],1);
+
+    # Plotting symbols are based on the group, not the annotation.
+    metal$pch = args[['condPch']][metal$best_ld_group];
+    
+    # Ref/cond SNPs have their own symbol if set by user. 
+    if (!is.null(args[['condRefsnpPch']])) {
+      metal$pch[metal$MarkerName %in% ref_cond_snps] = args[['condRefsnpPch']];
+    }
   }
   
-  save(metal,refSnp,args,file='temp.Rdata');
+  save(metal,refSnp,ref_cond_snps,ref_cond_snps_names,all_ld,num_ld_bins,col_pick,base_colors,cond_ld_colors,args,file='temp.Rdata');
 
   command <- paste("pquery refFlat_in_region",
       " -defaults",
@@ -3338,18 +3378,39 @@ if ('pdf' %in% args[['format']]) {
   grid.log(args,metal);
   
   # Write a page for the legend if conditional SNPs were specified. 
-  grid.newpage();
-  rl <- multiRibbonLegend(
-    ref_cond_snps_names,
-    args[['ldCuts']],
-    hues,
-    sat_range,
-    gp = gpar(cex = 0.8)
-  );
-  pushViewport(viewport(w=0.35,h=0.35));
-  grid.draw(rl);
-  popViewport();
-  
+  if (!is.null(cond_ld)) {
+    grid.newpage();
+    rl <- multiRibbonLegend(
+      ref_cond_snps_names,
+      args[['ldCuts']],
+      cond_ld_colors,
+      gp = gpar(cex = 0.8)
+    );
+    pushViewport(viewport(
+      w = 0.35,
+      h = 0.7,
+      layout = grid.layout(2,1)
+    ));
+
+    pushViewport(viewport(layout.pos.row=2,layout.pos.col=1));
+    grid.draw(rl);
+    popViewport();
+
+    pushViewport(viewport(layout.pos.row=1,layout.pos.col=1));
+
+    cond_key = simpleKey(rev(ref_cond_snps_names));
+    cond_key$cex = 1;
+    cond_key$points$cex = 1.25;
+    cond_key$points$col = rev(base_colors);
+    cond_key$points$fill = rev(base_colors);
+    cond_key$points$pch = rev(args[['condPch']][1:length(ref_cond_snps_names) + 1]);
+    grid.draw(draw.key(cond_key));
+
+    popViewport();
+
+    popViewport();
+  }
+
   # Write log pages for GWAS catalog hits within the plotting region (if provided.) 
   if (!is.null(gwas_hits) & all(dim(gwas_hits) > 0)) {
     gwas_hits = gwas_hits[order(gwas_hits$pos),];
@@ -3440,7 +3501,7 @@ sink(args[['log']], append=TRUE);
   cat('\n\n\n');
 sink();
 
-save(metal,refFlat,ld,recrate,refSnpPos,args,file='end.Rdata')
+save(metal,refFlat,ld,recrate,refSnpPos,cond_key,args,file='end.Rdata')
 CleanUp(args,refSnpPos,recrate,rug,ld,refFlatRaw);
 
 date();
