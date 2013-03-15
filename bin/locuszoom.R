@@ -3262,7 +3262,11 @@ if ( is.null(args[['reload']]) ) {
     }
   }
   
-  save(metal,refSnp,ref_cond_snps,ref_cond_snps_names,all_ld,num_ld_bins,col_pick,base_colors,cond_ld_colors,args,file='temp.Rdata');
+  save_objs = c('metal','refSnp','args');
+  if (!is.null(cond_ld)) {
+    save_objs = c(save_objs,'ref_cond_snps','ref_cond_snps_names','all_ld','num_ld_bins','col_pick','base_colors','cond_ld_colors');
+  }
+  save(list=save_objs,file='temp.Rdata');
 
   command <- paste("pquery refFlat_in_region",
       " -defaults",
@@ -3501,7 +3505,7 @@ sink(args[['log']], append=TRUE);
   cat('\n\n\n');
 sink();
 
-save(metal,refFlat,ld,recrate,refSnpPos,cond_key,args,file='end.Rdata')
+save(metal,refFlat,ld,recrate,refSnpPos,args,file='end.Rdata')
 CleanUp(args,refSnpPos,recrate,rug,ld,refFlatRaw);
 
 date();

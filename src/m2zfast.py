@@ -45,6 +45,7 @@ from subprocess import *
 from shutil import move,rmtree
 from prettytable import *
 from textwrap import fill
+from vcf_ld import *
 
 # Try importing modules that may not exist on a user's machine. 
 try:
@@ -534,12 +535,15 @@ def runM2Z(metal,metal2zoom_path,ld_files,refsnp,chr,start,end,no_snp_name,verbo
   rscript_path = find_systematic(conf.RSCRIPT_PATH);
 
   # If no LD file was created, make m2z use the database instead. 
-  if ld_files == None:
+  if (ld_files == None) or (len(ld_files) == 0):
     refsnp_ld = "NULL";
     cond_ld = "";
   else:
     refsnp_ld = ld_files[0];
-    cond_ld = "cond_ld=" + ",".join(ld_files[1:]);
+    if len(ld_files) > 1:
+      cond_ld = "cond_ld=" + ",".join(ld_files[1:]);
+    else:
+      cond_ld = "";
   
   cond_pos = "";
   cond_snps = "";
@@ -792,8 +796,9 @@ def printOpts(opts):
     'no_clean','no_transform','verbose','m2zpath','plotonly'
   );
   
-  cond_snps = [str(i) for i in opts.condsnps];
-  table.add_row(['condsnps',",".join(cond_snps)]);
+  if opts.condsnps:
+    cond_snps = [str(i) for i in opts.condsnps];
+    table.add_row(['condsnps',",".join(cond_snps)]);
 
   for opt in display_opts:
     val = getattr(opts,opt);
@@ -850,6 +855,7 @@ def getSettings():
   parser.add_option("--start",dest="start",help="Start position for interval near refsnp. Can be specified along with --end instead of using --flank.");
   parser.add_option("--end",dest="end",help="End position for interval near refsnp.");
   parser.add_option("--ld",dest="ld",help="Specify a user-defined LD file.");
+  parser.add_option("--ld-vcf",dest="ld_vcf",help="Specify a VCF file from which to compute LD.");
   parser.add_option("--no-ld",dest="no_ld",help="Disable calculating and displaying LD information.",action="store_true");
   parser.add_option("--build",dest="build",help="NCBI build to use when looking up SNP positions.");
   parser.add_option("--pop",dest="pop",help="Population to use for LD.");
@@ -1001,6 +1007,7 @@ def getSettings():
   # If the user disabled LD, we shouldn't use it..
   if opts.no_ld:
     opts.ld = None;
+    opts.ld_vcf = None;
 
   # Check to see if user passed in LD file. If they did, it better exist.
   # A user passing in an LD file eliminates the need to check if their
@@ -1009,6 +1016,10 @@ def getSettings():
     opts.ld = find_systematic(opts.ld);
     if opts.ld == None or not os.path.isfile(opts.ld):
       die("Error: user-specified LD file does not exist.\nFile was: %s " % opts.ld)
+  elif opts.ld_vcf != None:
+    opts.ld_vcf = find_systematic(opts.ld_vcf);
+    if opts.ld_vcf == None or not os.path.isfile(opts.ld_vcf):
+      die("Error: user-specified VCF file does not exist.\nFile was: %s " % opts.ld_vcf)
   else:
     if not opts.no_ld:
       # Fix up population/build/source settings before checking.
@@ -1390,6 +1401,8 @@ def runQueries(chr,start,stop,snpset,build,db_file):
   return results;
 
 def runAll(metal_file,refsnp,chr,start,end,opts,args):
+  conf = getConf();
+
   build = opts.build;
   delim = opts.delim;
   no_clean = opts.no_clean;
@@ -1443,7 +1456,23 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       print "Using user-specified LD file..";
       opts.ld = fixUserLD(opts.ld,refsnp,opts.sqlite_db_file);
       if opts.ld == None:
-        return; 
+        return;
+    elif opts.ld_vcf:
+      print "Using user-specified VCF file to calculate LD with reference SNP %s.." % str(refsnp);
+      
+      ld_files = [];
+      
+      tabix_region = "{0}:{1}-{2}".format(chr,start,end);
+      ld_temp = ld_indexsnp_vcf(refsnp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
+      if ld_temp != None:
+        ld_files.append(ld_temp);
+
+      if opts.condsnps:
+        for cond_snp in opts.condsnps:
+          print "Using user-specified VCF file to calculate LD with conditional SNP %s.." % str(cond_snp);
+          ld_temp = ld_indexsnp_vcf(cond_snp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
+          if ld_temp != None:
+            ld_files.append(ld_temp);
     else:
       print "Finding pairwise LD with reference SNP %s.." % str(refsnp);
       print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
@@ -1453,16 +1482,26 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       if ld_temp != None:
         ld_files.append(ld_temp);
 
-      for cond_snp in opts.condsnps:
-        print "Finding pairwise LD with conditional SNP %s.." % str(cond_snp);
-        print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
-        ld_temp = computeLD(cond_snp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
-        if ld_temp != None:
-          ld_files.append(ld_temp);
+      if opts.condsnps:
+        for cond_snp in opts.condsnps:
+          print "Finding pairwise LD with conditional SNP %s.." % str(cond_snp);
+          print "Source: %s | Population: %s | Build: %s" % (opts.source,opts.pop,build);
+          ld_temp = computeLD(cond_snp,chr,start,end,build,opts.pop,opts.source,opts.cache,not no_clean,opts.verbose);
+          if ld_temp != None:
+            ld_files.append(ld_temp);
 
   else:
     print "Skipping LD computations, --no-ld was given..";
     ld_temp = "NULL";
+
+  if opts.no_ld:
+    ld_final = None;
+  elif opts.ld:
+    ld_final = opts.ld;
+  elif len(ld_files) > 0:
+    ld_final = ld_files;
+  else:
+    ld_final = None;
 
   pqueries = {};
   print "Grabbing annotations from SQLite database..";
@@ -1488,7 +1527,7 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
       args += " %s=NULL" % m2zarg;
 
   print "Creating plot..";
-  ld_final = opts.ld if opts.ld != None else ld_files;
+
   runM2Z(metal_temp,opts.metal2zoom_path,ld_final,refsnp,chr,start,end,opts.no_snp_name,opts.verbose,opts,args);
 
   if not no_clean:
