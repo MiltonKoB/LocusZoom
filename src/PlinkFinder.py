@@ -37,7 +37,7 @@ class PlinkSettings:
       
       path = find_systematic(value);
       if path == None or not os.path.exists(path):
-        die("Error: could not find %s: %s, check conf file." % (str(arg),str(value)));
+        die("Error: path either does not exist or insufficient permissions to access it: %s" % str(value));
       else:
         exec "%s = \"%s\"" % (arg,path);
     

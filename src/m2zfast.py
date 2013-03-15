@@ -964,6 +964,10 @@ def getSettings():
   if os.path.getsize(opts.metal) <= 0:
     die("Error: metal file is empty: %s" % str(opts.metal));
 
+  # Check if we have access rights. 
+  if not os.access(opts.metal, os.R_OK):
+    die("Error: cannot access metal file, insufficient permissions: %s" % str(opts.metal));
+
   # Fix delimiter.
   if opts.delim in ("tab","\\t","\t"):
     opts.delim = "\t";
@@ -1020,6 +1024,11 @@ def getSettings():
     opts.ld_vcf = find_systematic(opts.ld_vcf);
     if opts.ld_vcf == None or not os.path.isfile(opts.ld_vcf):
       die("Error: user-specified VCF file does not exist.\nFile was: %s " % opts.ld_vcf)
+    
+    ld_vcf_tabix = opts.ld_vcf + ".tbi";
+    if not os.path.isfile(ld_vcf_tabix):
+      die("Error: expected a tabix index for VCF file but could not find it: %s" % ld_vcf_tabix);
+
   else:
     if not opts.no_ld:
       # Fix up population/build/source settings before checking.
@@ -1223,6 +1232,7 @@ def computeLD(snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbos
       ld_info['bim_dir'],
       conf.PLINK_PATH
     );
+
   else:
     raise Exception, "Error: conf file specification for %s/%s/%s is invalid, please check syntax." % (pop,source,build);
 
