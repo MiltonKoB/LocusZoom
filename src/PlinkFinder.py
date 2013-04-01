@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 import hashlib
-import pdb
+import re
 from LDRegionCache import *
 from m2zutils import *
 from textwrap import fill
@@ -105,6 +105,9 @@ class PlinkFinder():
     self._check_geno_paths();
     ld_file = self._run_plink();
 
+    if ld_file == None:
+      return;
+
     # Load LD.
     data = self._loadLD(ld_file);
 
@@ -185,9 +188,16 @@ class PlinkFinder():
     
     (stdout, stderr) = proc.communicate();
 
+    ld_loc = os.path.join(os.getcwd(),"plink.ld");
+    
     if proc.returncode != 0:
-      print >> sys.stderr, "Error: PLINK did not complete successfully. Check logs for more information.";
-      sys.exit(1);
+      log_file = os.path.join(os.getcwd(),"plink.log");
+
+      bMarkerMissing = _check_log_marker(log_file);
+      if not bMarkerMissing:
+        print >> sys.stderr, "Error: PLINK did not complete successfully. Please check the log file (run with --no-cleanup to see the directory with the log file.)";
+
+      ld_loc = None;
 
     if self.cleanup:
       delete_files = ['plink.log'];
@@ -197,5 +207,17 @@ class PlinkFinder():
         except:
           pass;
 
-    ld_loc = os.path.join(os.getcwd(),"plink.ld");
     return ld_loc;
+
+def _check_log_marker(log_file):
+  try:
+    data = open(log_file).read();
+  except:
+    return False;
+
+  matches = re.findall("ERROR: --ld-snp.*not found",data);
+  if len(matches) > 0:
+    return True;
+  else:
+    return False;
+
