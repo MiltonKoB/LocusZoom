@@ -393,7 +393,7 @@ def is_bz2(file):
 
 # Given a metal file, this function extracts the region from the file between
 # chr/start/end.
-def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_file,delim):
+def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_file,delim):
   region = "chr%s:%s-%s" % (str(chr),start,end);
   output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
   
@@ -525,6 +525,109 @@ def myPocull(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fil
                           "correct genome build by using the --build parameter, or by "
                           "selecting the appropriate build on the website.");
     print >> sys.stderr, "";
+
+  return (found_in_region,output_file,min_snp);
+
+# Given an EPACTS file, this function extracts the region from the file between
+# chr/start/end.
+def readEPACTS(epacts_file,chr,start,end,no_transform):
+  region = "chr%s:%s-%s" % (str(chr),start,end);
+  output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
+
+  chr = int(chr);
+  start = int(start);
+  end = int(end);
+
+  # Open file for reading. Attempt to determine if file is compressed before opening. 
+  if is_gzip(epacts_file):
+    try:
+      f = gzip.open(epacts_file); # throws exception if gz not on system
+    except:
+      die("Error: gzip is not supported on your system, cannot read --epacts file.");
+  elif is_bz2(epacts_file):
+    try:
+      f = bz2.BZ2File(epacts_file,"rU");
+    except NameError:
+      die("Error: bz2 is not supported on your system, cannot read --epacts file.");
+  else:
+    f = open(epacts_file,"rU");
+
+  # Find column indices. 
+  epacts_header = f.next().split("\t");
+  epacts_header[-1] = epacts_header[-1].rstrip();
+
+  # Find chr/begin/end columns. 
+  try:
+    chr_col = epacts_header.index("#CHROM");
+    begin_col = epacts_header.index("BEGIN");
+    end_col = epacts_header.index("END");
+  except:
+    die("Error: could not find required columns in your EPACTS file: CHROM, BEGIN, END");
+
+  # Find p-value column.
+  try:
+    pval_col = epacts_header.index("PVALUE");
+  except:
+    die("Error: could not find p-value column in EPACTS file: PVALUE");
+  
+  out = open(output_file,"w");
+  print >> out, "\t".join(['chr','pos','MarkerName','P-value']);
+  format_str = "\t".join(['%i','%i','%s','%s']);
+  
+  # Arbitrary arithmetic precision  
+  decimal.getcontext().prec = 8;
+
+  found_in_region = False;
+  min_snp = None;
+  min_pval = decimal.Decimal(1);
+  skipped_markers = [];
+  for line in f:
+    # Skip blank lines. 
+    if line.rstrip() == "":
+      continue;
+    
+    e = line.split("\t");
+    e[-1] = e[-1].rstrip();
+
+    marker_name = "chr%s:%s" % (e[chr_col],e[begin_col]);
+
+    try:
+      file_chrom = int(e[chr_col]);
+      file_begin = int(e[begin_col]);
+      file_end = int(e[end_col]);
+    except:
+      print >> sys.stderr, "Warning: skipping marker %s - could not convert chr/begin/end to integers.." % marker_name;
+      continue;
+
+    if file_begin != file_end:
+      skipped_markers.append("chr%s:%s-%s" % (file_chrom,file_begin,file_end));
+      continue;
+
+    if file_chrom == chr and file_begin >= start and file_end <= end:
+      # Did we find a SNP in this region at all? 
+      found_in_region = True;
+      
+      pval = e[pval_col];
+  
+      if is_number(pval):     
+        dec_pval = decimal.Decimal(pval);
+      
+        if dec_pval < min_pval:
+          min_snp = marker_name;
+          min_pval = dec_pval; 
+          
+        if not no_transform:
+          pval = str(-1*dec_pval.log10());
+        
+        print >> out, format_str % (file_chrom,file_begin,marker_name,pval);
+      else:
+        print >> sys.stderr, "Warning: marker at position %s has invalid p-value: %s, skipping.." % (marker_name,str(pval));
+
+  if len(skipped_markers) > 0:
+    print >> sys.stderr, "Warning: skipped %i markers that did not appear to be SNPs.." % len(skipped_markers);
+
+  f.close();
+  out.close();
 
   return (found_in_region,output_file,min_snp);
 
@@ -780,7 +883,11 @@ def printOpts(opts):
   table.set_field_align('Option','l');
   table.set_field_align('Value','l');
   
-  table.add_row(['metal',os.path.split(opts.metal)[1]]);
+  if opts.metal:
+    table.add_row(['metal',os.path.split(opts.metal)[1]]);
+  elif opts.epacts:
+    table.add_row(['epacts',os.path.split(opts.epacts)[1]]);
+
   if opts.refsnp:
     table.add_row(['refsnp',opts.refsnp]);
   elif opts.refgene:
@@ -842,6 +949,7 @@ def getSettings():
   
   parser = OptionParser();
   parser.add_option("--metal",dest="metal",help="Metal file.");
+  parser.add_option("--epacts",dest="epacts",help="EPACTS results file.");
   parser.add_option("--delim",dest="delim",help="Delimiter for metal file.");
   parser.add_option("--pvalcol",dest="pvalcol",help="Name of p-value column or 0-based integer specifying column number.");
   parser.add_option("--markercol",dest="snpcol",help="Name of SNP column or 0-based integer specifying column number.");
@@ -950,23 +1058,34 @@ def getSettings():
   if mode_count > 1:
     die_help("Must specify either --refgene or --hitspec. These options are mutually exclusive.",parser);
   
-  # Check metal file for existence.
-  if not opts.metal:
-    die("Must supply --metal <file>.");
+  # Perform checks on input file. 
+  if opts.metal:
+    input_file = find_systematic(opts.metal);
+    if input_file == None:
+      die("Error: could not find file: %s" % opts.metal);
+
+    opts.metal = input_file;
+
+  elif opts.epacts:
+    input_file = find_systematic(opts.epacts);
+    if input_file == None:
+      die("Error: could not find file: %s" % opts.epacts);
+
+    opts.epacts = input_file;
+
+    opts.delim = "\t";
+    opts.pvalcol = "P-value",
+    opts.snpcol = "MarkerName", 
   else:
-    metal_test = find_systematic(opts.metal);
-    if metal_test == None:
-      die("Error: could not find metal file %s" % opts.metal);
-    else:
-      opts.metal = os.path.abspath(metal_test);
+    die("Error: must supply either --metal or --epacts file.");
 
   # Check metal file size. 
-  if os.path.getsize(opts.metal) <= 0:
-    die("Error: metal file is empty: %s" % str(opts.metal));
+  if os.path.getsize(input_file) <= 0:
+    die("Error: input file is empty: %s" % str(input_file));
 
   # Check if we have access rights. 
-  if not os.access(opts.metal, os.R_OK):
-    die("Error: cannot access metal file, insufficient permissions: %s" % str(opts.metal));
+  if not os.access(input_file, os.R_OK):
+    die("Error: cannot access input file, insufficient permissions: %s" % str(input_file));
 
   # Fix delimiter.
   if opts.delim in ("tab","\\t","\t"):
@@ -1410,7 +1529,7 @@ def runQueries(chr,start,stop,snpset,build,db_file):
   
   return results;
 
-def runAll(metal_file,refsnp,chr,start,end,opts,args):
+def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   conf = getConf();
 
   build = opts.build;
@@ -1418,8 +1537,13 @@ def runAll(metal_file,refsnp,chr,start,end,opts,args):
   no_clean = opts.no_clean;
   
   print "Beginning plotting sequence for: %s" % str(refsnp);
-  print "Extracting region of interest (%s) from metal file.." % regionString(chr,start,end);
-  (bPocull,metal_temp,min_snp) = myPocull(metal_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
+  print "Extracting region of interest (%s) from input file.." % regionString(chr,start,end);
+
+  if input_type == 'metal':
+    (bPocull,metal_temp,min_snp) = readMETAL(input_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
+  elif input_type == 'epacts':
+    (bPocull,metal_temp,min_snp) = readEPACTS(input_file,chr,start,end,opts.no_trans);
+
   ld_temp = None;
   
   # If poculling does not give us any SNPs in the region, we're done. 
@@ -1627,15 +1751,28 @@ def main():
       # create files here. 
       os.chdir(temp_dir);
 
+      # Get input file and type (metal, epacts)
+      input_file = None;
+      input_type = None;
+
+      if opts.metal:
+        input_file = opts.metal;
+        input_type = "metal";
+      elif opts.epacts:
+        input_file = opts.epacts;
+        input_type = "epacts";
+      else:
+        die("Error: did not get either --metal or --epacts.");
+
       # Create the plot. This runs through the whole sequence of fetching LD and running M2Z.
-      runAll(opts.metal,entry[0],entry[1],entry[2],entry[3],opts,iter_args);
+      runAll(input_file,input_type,entry[0],entry[1],entry[2],entry[3],opts,iter_args);
 
       # Change back up to the parent directory where we started running from. 
       os.chdir("..");
 
       # If they only want the plot, move/rename the pdf and delete the directory created.
       if opts.plotonly:
-        image_file = glob(os.path.join(temp_dir,"*.[dfgpn]*")); # grabs pdf or png, or both
+        image_file = glob(os.path.join(temp_dir,"*.pdf")); 
         exts = [os.path.splitext(i)[1] for i in image_file];
         if len(image_file) == 0:
           print >> sys.stderr, "Error: no image file found";
