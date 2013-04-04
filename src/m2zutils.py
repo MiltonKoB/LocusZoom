@@ -22,13 +22,21 @@ import os
 import decimal
 import fnmatch
 
+# Great way to implement python enums, courtesy of: 
+# http://stackoverflow.com/questions/36932/whats-the-best-way-to-implement-an-enum-in-python
+def enum(*sequential, **named):
+  enums = dict(zip(sequential, range(len(sequential))), **named)
+  reverse = dict((value, key) for key, value in enums.iteritems())
+  enums['reverse'] = reverse
+  return type('Enum', (), enums)
+
 def singleton(cls):
-    instances = {}
-    def getinstance():
-        if cls not in instances:
-            instances[cls] = cls()
-        return instances[cls]
-    return getinstance
+  instances = {}
+  def getinstance():
+      if cls not in instances:
+          instances[cls] = cls()
+      return instances[cls]
+  return getinstance
 
 def which(f):
   for path in os.environ['PATH'].split(os.pathsep):

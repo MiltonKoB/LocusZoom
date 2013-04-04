@@ -124,6 +124,42 @@ def getLDInfo(pop,source,build,ld_db):
   # If we make it here, the supplied combination of source/build/pop is not supported. 
   return None;
 
+def getGWASCat(build,code,gwas_cats):
+  if build in gwas_cats:
+    node = gwas_cats[build];
+    if code in node:
+      subnode = node[code];
+      return subnode['file'];
+
+  return None;
+
+# Print a table of all available GWAS catalogs.
+def printGWACatalogs(cat_db,build):
+  print "Available GWAS catalogs for build %s:" % build;
+  print "";
+
+  tree = cat_db.get(build);
+  if tree == None:
+    print "-- No catalogs available for this build."
+    return;
+
+  table = PrettyTable(['Option','Description']);
+  table.set_field_align('Option','l');
+  table.set_field_align('Description','l');
+
+  exists = False;  
+  for cat_code, cat_tree in tree.iteritems():
+    table.add_row([
+      cat_code,
+      cat_tree['desc']
+    ]);
+    exists = True;
+
+  if exists:
+    table.printt();
+  else:
+    print "-- No valid options for this build.";
+
 # Print a list of all supported population/build/database combinations. 
 def printSupportedTrios(ld_db):
   print "Genotype files available for: ";
@@ -899,10 +935,13 @@ def printOpts(opts):
     table.add_row(['start',opts.start]);
     table.add_row(['end',opts.end]);
 
-  display_opts = ('flank','build','ld','pop','source','snpset','db','cache',
+  display_opts = ('flank','build','ld','ld_measure','pop','source','snpset','db','cache',
     'no_clean','no_transform','verbose','m2zpath','plotonly'
   );
-  
+ 
+  if opts.ld_vcf:
+    table.add_row(['ld-vcf',os.path.split(opts.ld_vcf)[1]]);
+
   if opts.condsnps:
     cond_snps = [str(i) for i in opts.condsnps];
     table.add_row(['condsnps',",".join(cond_snps)]);
@@ -964,6 +1003,8 @@ def getSettings():
   parser.add_option("--end",dest="end",help="End position for interval near refsnp.");
   parser.add_option("--ld",dest="ld",help="Specify a user-defined LD file.");
   parser.add_option("--ld-vcf",dest="ld_vcf",help="Specify a VCF file from which to compute LD.");
+  parser.add_option("--ld-measure",dest="ld_measure",help="Specify LD measure to use. Can be either 'rsquare' or 'dprime'. Default is rsquare.");
+  parser.add_option("--gwas-cat",dest="gwas_cat",help="Select GWAS catalog to use for plotting GWAS hits track.");
   parser.add_option("--no-ld",dest="no_ld",help="Disable calculating and displaying LD information.",action="store_true");
   parser.add_option("--build",dest="build",help="NCBI build to use when looking up SNP positions.");
   parser.add_option("--pop",dest="pop",help="Population to use for LD.");
@@ -991,6 +1032,8 @@ def getSettings():
     no_ld = False,
     no_transform = False,
     build = conf.DEFAULT_BUILD,
+    ld_measure = 'rsquare',
+    gwas_cat = None,
     plotonly = False,
     prefix = None,
     pvalcol = "P-value",
@@ -1162,6 +1205,16 @@ def getSettings():
         print >> sys.stderr, "";
         printSupportedTrios(conf.LD_DB);
         sys.exit(1);
+
+  # Check GWAS catalog setting.
+  if opts.gwas_cat != None:
+    gwas_cat_file = getGWASCat(opts.build,opts.gwas_cat,conf.GWAS_CATS);
+    if gwas_cat_file == None:
+      print >> sys.stderr, "Error: no gwas catalog '%s' for build '%s', possible options are:" % (opts.gwas_cat,opts.build);
+      printGWACatalogs(conf.GWAS_CATS,opts.build);
+      sys.exit(1);
+    else:
+      opts.gwas_cat_file = find_systematic(gwas_cat_file);
 
   # Change refSNP into a chr:pos SNP. 
   if opts.refsnp:
@@ -1597,14 +1650,14 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
       ld_files = [];
       
       tabix_region = "{0}:{1}-{2}".format(chr,start,end);
-      ld_temp = ld_indexsnp_vcf(refsnp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
+      ld_temp = ld_from_vcf(opts.ld_measure,refsnp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
       if ld_temp != None:
         ld_files.append(ld_temp);
 
       if opts.condsnps:
         for cond_snp in opts.condsnps:
           print "Using user-specified VCF file to calculate LD with conditional SNP %s.." % str(cond_snp);
-          ld_temp = ld_indexsnp_vcf(cond_snp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
+          ld_temp = ld_from_vcf(opts.ld_measure,cond_snp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
           if ld_temp != None:
             ld_files.append(ld_temp);
     else:
@@ -1637,6 +1690,9 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   else:
     ld_final = None;
 
+  if ld_final != None:
+    args += " ldCol=%s" % opts.ld_measure;
+
   pqueries = {};
   print "Grabbing annotations from SQLite database..";
   pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file);
@@ -1659,6 +1715,10 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
       args += " %s=%s" % (m2zarg,file);
     else:
       args += " %s=NULL" % m2zarg;
+
+  # GWAS catalog.
+  if opts.gwas_cat_file != None:
+    args += " gwasHits=%s" % opts.gwas_cat_file;
 
   print "Creating plot..";
 
