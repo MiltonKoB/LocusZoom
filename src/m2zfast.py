@@ -1215,6 +1215,8 @@ def getSettings():
       sys.exit(1);
     else:
       opts.gwas_cat_file = find_systematic(gwas_cat_file);
+  else:
+    opts.gwas_cat_file = None;
 
   # Change refSNP into a chr:pos SNP. 
   if opts.refsnp:
