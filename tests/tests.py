@@ -805,51 +805,12 @@ def create_tests():
     title = "1000G_March2012 / ALL / hg19 / KCNQ1 (from VCF)"
   ));
 
-  # T2DGENES P1 data
-  
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_EUR_hg19_CDKAL1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CDKAL1.out --refgene CDKAL1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / EUR / hg19 / CDKAL1"
+    "--prefix 1000g_mar2012_ALL_hg19_KCNQ1_vcftest --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr11.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz --ld-measure dprime showAnnot=F",
+    title = "1000G_March2012 / ALL / hg19 / KCNQ1 / DPRIME (from VCF)"
   ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AMR_hg19_CDKAL1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CDKAL1.out --refgene CDKAL1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AMR / hg19 / CDKAL1"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AFR_hg19_CDKAL1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CDKAL1.out --refgene CDKAL1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AFR / hg19 / CDKAL1"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_ASN_hg19_CDKAL1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CDKAL1.out --refgene CDKAL1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / ASN / hg19 / CDKAL1"
-  ));
-  
-  ####
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_EUR_hg19_CLDN10 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CLDN10.out --refgene CLDN10 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / EUR / hg19 / CLDN10"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AMR_hg19_CLDN10 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CLDN10.out --refgene CLDN10 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AMR / hg19 / CLDN10"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AFR_hg19_CLDN10 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CLDN10.out --refgene CLDN10 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AFR / hg19 / CLDN10"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_ASN_hg19_CLDN10 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.CLDN10.out --refgene CLDN10 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / ASN / hg19 / CLDN10"
-  ));
-  
-  ####
+
+  # T2DGENES P1 data - KCNQ1 - 1000G March 2012
   
   tests.append(Test(
    "--prefix t2dgp1_1000g_mar2012_EUR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
@@ -871,29 +832,7 @@ def create_tests():
    title = "T2DG-P1 1000G_March2012 / ASN / hg19 / KCNQ1"
   ));
   
-  ####
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_EUR_hg19_LEP --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.LEP.out --refgene LEP --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / EUR / hg19 / LEP"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AMR_hg19_LEP --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.LEP.out --refgene LEP --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AMR / hg19 / LEP"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AFR_hg19_LEP --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.LEP.out --refgene LEP --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AFR / hg19 / LEP"
-  ));
-  
-  tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_ASN_hg19_LEP --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.LEP.out --refgene LEP --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / ASN / hg19 / LEP"
-  ));
-  
-  ####
+  # T2DGENES P1 data - TCF7L2 - 1000G March 2012
   
   tests.append(Test(
    "--prefix t2dgp1_1000g_mar2012_EUR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
@@ -913,6 +852,18 @@ def create_tests():
   tests.append(Test(
    "--prefix t2dgp1_1000g_mar2012_ASN_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
    title = "T2DG-P1 1000G_March2012 / ASN / hg19 / TCF7L2"
+  ));
+
+  # EPACTS result file tests
+  tests.append(Test(
+    "--prefix epacts_GOT2D --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr14:106332131 --ld-vcf GoT2D.chr14.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
+    title = "EPACTS / GOT2D / LD-VCF"
+  ));
+
+  # GWAS catalog tests
+  tests.append(Test(
+  "--prefix 1000g_nov2010_EUR_hg19_KCNQ1_gwascat --gwas-cat whole-cat_significant-only --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+  title = "NHGRI GWAS / hg19 / KCNQ1"
   ));
 
   return tests;
