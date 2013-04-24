@@ -36,7 +36,10 @@ class FugueSettings:
       
       path = find_systematic(value);
       if path == None or not os.path.exists(path):
-        die("Error: path either does not exist or insufficient permissions to access it: %s" % str(value));
+        if arg == "fugue_path":
+          die("Error: cannot find new_fugue - please set the path in the configuration file, or make it available on your PATH.");
+        else:
+          die("Error: path either does not exist or insufficient permissions to access it: %s" % str(value));
       else:
         exec "%s = \"%s\"" % (arg,path);
     

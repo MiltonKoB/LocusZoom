@@ -5,7 +5,7 @@ Bug fixes:
 -- dbmeister.py would complain about not being able to find which
 -- which() would fail if a dir on the user's PATH did not exist
 -- SQL queries for variant annotations and other tables were run even if the tables did not exist
--- locuszoom tries to find Rscript and run locuszoom.R accordingly, rather than assuming Rscript was located in /usr/bin/ (can also now change RSCRIPT_PATH in conf file)
+-- locuszoom now tries to find Rscript and run locuszoom.R accordingly, rather than assuming Rscript was located in /usr/bin/ (can also now change RSCRIPT_PATH in conf file)
 
 Features added:
 -- support for March 2012 1000G for computing LD (ASN, AFR, EUR, AMR)

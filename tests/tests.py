@@ -6,6 +6,7 @@ import time
 import hashlib
 import tempfile
 from killableprocess import *
+from multiprocessing import *
 
 PYEXE = "python";
 
@@ -109,7 +110,7 @@ class FileSystemWatcher():
 
 # Class responsible for running a set of Tests. 
 class TestSuite():
-  def __init__(self,bin,args,run_dir,log_file=None):
+  def __init__(self,bin,args,run_dir,log_file="log_file.txt",multi=5):
     self.bin = find_systematic(bin);
     
     if args != None:
@@ -118,6 +119,7 @@ class TestSuite():
     self.run_dir = find_systematic(run_dir);
     self.tests = [];
     self.log = log_file;
+    self.multi = multi;
     if not os.path.isdir(self.run_dir):
       raise ValueError, "Error: dir %s is not a directory." % str(run_dir);
 
@@ -139,29 +141,40 @@ class TestSuite():
     # Setup log file if requested. 
     log_file = None;
     if self.log:
-      log_file = open(self.log,"a");
+      log_file = os.path.join(os.getcwd(),self.log);
+      proc_manager = Manager();
+      log_lock = proc_manager.Lock();
     else:
-      log_file = sys.stdout;
+      raise ValueError, "Error: must give a log file name by log_file= parameter.";
 
     # Run tests. 
-    test_results = {};
-    all_pdfs = [];
+    pool = Pool(self.multi);
+    proc_results = [];
     for test in self.tests:
-      hard_write(log_file,"$ Executing test [%i]: %s" % (test.id,test.title));
-      
       if test.bin == None:
         test.bin = self.bin;
      
       if log_file != None:
         test.out_file = log_file;
-      
-      result = test.run();
+        test.out_lock = log_lock;
 
-      for p in test.pdfs:
-        all_pdfs.append(p);        
+      proc_results.append(pool.apply_async(test));
+    
+    print "Waiting for tests to terminate..";
+    pool.close();
+    pool.join();
 
-      for r in result:
-        test_results.setdefault(test.id,[]).append(r);
+    test_results = {};
+    all_pdfs = [];
+    finished_tests = [];
+    for presult in proc_results:
+      test_done = presult.get();
+
+      finished_tests.append(test_done);
+      all_pdfs.extend(test_done.pdfs);
+
+      for r in test_done.results:
+        test_results.setdefault(test_done.id,[]).append(r);
 
     # Combine PDFs. 
     out_name = "allpdfs_" + time.strftime("%Y-%m-%d_%H-%M-%S") + ".pdf";
@@ -169,7 +182,7 @@ class TestSuite():
 
     # Combine gold standard plots. 
     gold_list = [];
-    for test in self.tests:
+    for test in finished_tests:
       if test.gold_standard != None and test.gold_standard != "":
         gold_list.append(test.gold_standard);
         for p in test.pdfs:
@@ -186,16 +199,20 @@ class TestSuite():
     for i in xrange(len(test_results)):
       result = test_results[i];
       test = self.tests[i];
+      
+      log = open(log_file,"a");
 
-      hard_write(log_file,"Test [%i] - %s:" % (i,test.title));
+      hard_write(log,"Test [%i] - %s:" % (i,test.title));
       for r in result:
-        hard_write(log_file,"Result:");
-        hard_write(log_file,"|-  Pass: [%s]" % str(r['pass']));
-        hard_write(log_file,"|-  Message: %s" % str(r['msg']));
-        hard_write(log_file,"|-  File: %s" % ("NA" if not r.has_key('file') else str(r['file'])));
-        hard_write(log_file,"-------");
+        hard_write(log,"Result:");
+        hard_write(log,"|-  Pass: [%s]" % str(r['pass']));
+        hard_write(log,"|-  Message: %s" % str(r['msg']));
+        hard_write(log,"|-  File: %s" % ("NA" if not r.has_key('file') else str(r['file'])));
+        hard_write(log,"-------");
   
-      hard_write(log_file,"");
+      hard_write(log,"");
+
+      log.close();
 
 class Test():
   def __init__(self,cmd_string,out_file=None,title="",timeout=-1):
@@ -208,7 +225,9 @@ class Test():
     self.timeout = timeout;
     self.gold_standard = "";
     self.should_fail = False;
+
     self.out_file = out_file;
+    self.out_lock = None;
 
     # Set after execution: 
     self.files = [];
@@ -223,9 +242,18 @@ class Test():
   def hash(self):
     return hashlib.md5(self.cmd + self.title + "".join(required_files));
 
+  def __call__(self):
+    return self.run();
+
   def run(self):
     self.files = [];
     self.pdfs = [];
+
+    # Create temporary directory to execute in. 
+    orig_dir = os.getcwd();
+    temp_dir = tempfile.mkdtemp(dir=".");
+    time.sleep(0.5);
+    os.chdir(temp_dir);
 
     # Make sure required files exist. 
     for f in self.required_files:
@@ -239,21 +267,11 @@ class Test():
     else:
       raise ValueError, "Bin not specified.";
 
-    # Should we be writing output to a file? 
-    out = sys.stdout;
-    if self.out_file != None:
-      if isinstance(self.out_file,str):
-        out = open(self.out_file,"a");
-      elif isinstance(self.out_file,file):
-        out = self.out_file;
-      else:
-        raise ValueError, "Test out_file parameter must either be a filename (string) or file object.";
-
     # Was there a title? 
     if self.title != "":
       run_cmd += " title=\"%s\"" % str(self.title);
-      
-    print run_cmd;
+
+    print "[%i] %s -- %s" % (self.id,self.title,run_cmd);
 
     # Start watching directories below the run directory for changes. 
     watcher = FileSystemWatcher(dir=".",recursive=True);
@@ -265,6 +283,8 @@ class Test():
     retcode = proc.wait(timeout=self.timeout);
     watcher.end();
 
+    print "[%i] %s -- finished!" % (self.id,self.title);
+    
     # Get output from process. 
     proc_stream.seek(0);
     proc_string = proc_stream.read();
@@ -307,13 +327,18 @@ class Test():
         else:
           results.append({'pass':False,'msg':"PDF generated, but file size was 0.",'file':file});
 
+    self.results = results;
+
     # Redirect output. 
-    if self.out_file != None:
-      hard_write(out,proc_string);
-    else:
+    self.out_lock.acquire();
+    print self.out_file;
+    with open(self.out_file,"a") as out:
+      out.write("$ Test [%i]: %s" % (self.id,self.title));
       out.write(proc_string);
- 
-    return results;
+      out.write("\n");
+    self.out_lock.release();
+
+    return self;
 
 def create_tests():
   print "Creating test cases..";
@@ -388,7 +413,7 @@ def create_tests():
   badsnp_hitspec_test.add_required_file("tests/data/hitlist_bad_snp.txt"); 
   badsnp_hitspec_test.should_fail = True;
   tests.append(badsnp_hitspec_test); 
-  
+
   # Test what happens when metal file has windows line terminators. 
   winline_test = Test("--metal tests/data/windows_line_term_rs1531343.txt --refsnp rs1531343 --delim space --prefix winline");
   winline_test.title = "Windows line terminator test"
@@ -431,7 +456,7 @@ def create_tests():
   missing_ld_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt");
   missing_ld_test.should_fail = True;
   tests.append(missing_ld_test);
-  
+
   # User defined LD file exists, but header is missing. 
   user_ld_noheader_test = Test("--prefix user_ld_noheader_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refsnp rs7578326 --ld tests/data/bad_ld_noheader.txt --no-cleanup");
   user_ld_noheader_test.title = "User-defined LD file has no header";
@@ -460,13 +485,13 @@ def create_tests():
   log_trans_test.title = "Testing file with p-values [0.1,1], transform on";
   log_trans_test.should_fail = False;
   tests.append(log_trans_test);
-  
+
   # Same metal file as before, but now with transformation turned off. 
   log_trans_off_test = Test("--prefix log_trans_off_test --no-transform --metal tests/data/diagramv2_rs1531343_3MB_pval-point1to1.txt --refsnp rs1531343 --flank 100kb --no-cleanup --pvalcol P.value");
   log_trans_off_test.title = "Testing file with p-values [0.1,1], transform off";
   log_trans_off_test.should_fail = False;
   tests.append(log_trans_off_test);
-  
+
   # Try with a metal file that has blank lines. 
   blanklines_test = Test("--prefix blanklines_test --metal tests/data/blanklines_diagramv2_rs1531343_3MB.txt --refsnp rs1531343 --flank 300kb --delim space");
   blanklines_test.title = "Testing metal file with blank lines";
@@ -478,12 +503,12 @@ def create_tests():
   gzip_test.title = "Testing gzipped file";
   gzip_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt.gz");
   tests.append(gzip_test);
-  
+
   # Test a metal file that has random line endings (\r\n, \r, \n.) 
   bad_lineends_test = Test("--prefix bad_lineends --metal tests/data/diagramv2_semeta_120108_bad_lineends.tbl --refsnp rs1531343 --flank 500kb --plotonly");
   bad_lineends_test.title = "Testing normal metal file with bad line endings"
   tests.append(bad_lineends_test);
-  
+
   # Try using a gzipped with bad line endings. 
   gzip_badlineends_test = Test("--prefix gzip_badlineends --metal tests/data/diagramv2_badlineends_chr10_rs7903146_500kb.tbl --refsnp rs7903146 --flank 300kb");
   gzip_badlineends_test.title = "Testing gzipped file with bad line endings";
@@ -495,7 +520,7 @@ def create_tests():
   bzip_test.title = "Testing bz2 file";
   bzip_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt.bz2");
   tests.append(bzip_test);
-  
+
   # Arbitrary precision test. 
   arb_prec_test = Test("--no-cleanup --prefix arb_prec_test --metal tests/data/HDL_ONE_Eur_b36.tbl --refsnp rs3764261 --markercol SNPColumn --pvalcol GC.Pvalue");
   arb_prec_test.title = "Testing arbitrary precision for extremely small p-values"
@@ -512,75 +537,75 @@ def create_tests():
   jpt_test = Test("--prefix JPT_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop JPT+CHB");
   jpt_test.title = "Testing JPT+CHB LD info";
   tests.append(jpt_test);
-  
-#  hg17_jpt_test = Test("--prefix hg17_JPT_test --build hg17 --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop JPT+CHB");
-#  hg17_jpt_test.title = "Testing hg17 JPT+CHB LD info";
-#  tests.append(hg17_jpt_test);
+
+  #  hg17_jpt_test = Test("--prefix hg17_JPT_test --build hg17 --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop JPT+CHB");
+  #  hg17_jpt_test.title = "Testing hg17 JPT+CHB LD info";
+  #  tests.append(hg17_jpt_test);
 
   yri_test = Test("--prefix YRI_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop YRI");
   yri_test.title = "Testing YRI LD info";
   tests.append(yri_test);  
 
-#  hg17_yri_test = Test("--prefix hg17_YRI_test --build hg17 --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop YRI");
-#  hg17_yri_test.title = "Testing hg17 YRI LD info";
-#  tests.append(hg17_yri_test);
+  #  hg17_yri_test = Test("--prefix hg17_YRI_test --build hg17 --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop YRI");
+  #  hg17_yri_test.title = "Testing hg17 YRI LD info";
+  #  tests.append(hg17_yri_test);
 
   ceu_test = Test("--prefix CEU_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop CEU");
   ceu_test.title = "Testing CEU LD info";
   tests.append(ceu_test);
-  
-#  hg17_ceu_test = Test("--prefix hg17_CEU_test --build hg17 --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop CEU");
-#  hg17_ceu_test.title = "Testing hg17 CEU LD info";
-#  tests.append(hg17_ceu_test);
-  
+
+  #  hg17_ceu_test = Test("--prefix hg17_CEU_test --build hg17 --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop CEU");
+  #  hg17_ceu_test.title = "Testing hg17 CEU LD info";
+  #  tests.append(hg17_ceu_test);
+
   chrx_ceu_test = Test("--prefix CEU_test --metal tests/data/diagram+_chrx-meta_090809_nall_b36_v1.tbl --refsnp rs5945326 --pop CEU");
   chrx_ceu_test.title = "Testing CEU LD on chrX";
   tests.append(chrx_ceu_test);
-  
-#  chrx_hg17_ceu_test = Test("--prefix hg17_CEU_test --build hg17 --metal /home/welchr/projects/diagram+_chrx/meta/2009-09-08/diagram+_chrx-meta_090809_nall_b36_v1.tbl --refsnp rs5945326 --pop CEU");
-#  chrx_hg17_ceu_test.title = "Testing hg17 CEU on chrX";
-#  tests.append(chrx_hg17_ceu_test);
-  
+
+  #  chrx_hg17_ceu_test = Test("--prefix hg17_CEU_test --build hg17 --metal /home/welchr/projects/diagram+_chrx/meta/2009-09-08/diagram+_chrx-meta_090809_nall_b36_v1.tbl --refsnp rs5945326 --pop CEU");
+  #  chrx_hg17_ceu_test.title = "Testing hg17 CEU on chrX";
+  #  tests.append(chrx_hg17_ceu_test);
+
   dprime_ceu_test = Test("--prefix dprime_CEU_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refgene TCF7L2 --pop CEU ldCol=dprime");
   dprime_ceu_test.title = "Testing CEU LD with dprime";
   tests.append(dprime_ceu_test);
-  
+
   # Test 1000G LD. 
   g1k_ceu_test = Test("--prefix 1000G_CEU_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refgene LIPC --source 1000G_Aug2009 --pop CEU");
   g1k_ceu_test.title = "Testing 1000G CEU hg18";
   tests.append(g1k_ceu_test);
-  
+
   refsnp_g1k_ceu_test = Test("--prefix 1000G_refsnp_CEU_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refsnp chr16:55558762 --flank 300kb --source 1000G_Aug2009 --pop CEU");
   refsnp_g1k_ceu_test.title = "Testing 1000G CEU hg18, refsnp is 1000G";
   tests.append(refsnp_g1k_ceu_test);
-  
+
   g1k_june2010_ceu_test = Test("--prefix 1000G_June2010_CEU_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refgene LIPC --source 1000G_June2010 --pop CEU");
   g1k_june2010_ceu_test.title = "Testing 1000G June2010 CEU hg18";
   tests.append(g1k_june2010_ceu_test);
-  
+
   g1k_june2010_yri_test = Test("--prefix 1000G_June2010_YRI_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refgene LIPC --source 1000G_June2010 --pop YRI");
   g1k_june2010_yri_test.title = "Testing 1000G June2010 YRI hg18";
   tests.append(g1k_june2010_yri_test);
-  
+
   g1k_june2010_jptchb_test = Test("--prefix 1000G_June2010_JPTCHB_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refgene LIPC --source 1000G_June2010 --pop JPT+CHB");
   g1k_june2010_jptchb_test.title = "Testing 1000G June2010 JPT+CHB hg18";
   tests.append(g1k_june2010_jptchb_test);
-  
+
   # Testing what happens when a 1000G SNP is used with hapmap LD. This might fail..
   g1k_hapmap_test = Test("--prefix 1000G_hapmap-CEU_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refsnp chr15:56497991 --pop CEU");
   g1k_hapmap_test.title = "Testing a 1000G refSNP with hapmap LD, large region";
   tests.append(g1k_hapmap_test);
-  
+
   # Same test as above, but smaller region that might trip a "pre-computed" lookup.
   g1k_precomp_hapmap_test = Test("--prefix 1000G_hapmap-CEU_hg18_test --metal tests/data/Lipids1kG_METAANALYSIS_HDL_FDC_GC1_hg18.tbl --refsnp chr15:56497991 --flank 100kb --pop CEU");
   g1k_precomp_hapmap_test.title = "Testing a 1000G refSNP with hapmap LD, small region";
   tests.append(g1k_precomp_hapmap_test);
-  
+
   # Test user-defined LD file.
   user_ld_test = Test("--prefix user_ld_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --delim space --refsnp rs7578326 --ld tests/data/templd_rs7578326_and_rs1002227.txt --no-cleanup");
   user_ld_test.title = "Testing user-defined LD file";
   tests.append(user_ld_test);
-  
+
   # Try plotting a region on X. 
   chrx_region_test = Test("--prefix chrx_region --metal tests/data/diagram+_chrx-meta_090809_nall_b36_v1.tbl --chr X --start 152000000 --end 153000000");
   chrx_region_test.title = "Testing region specifying for chr X";
@@ -598,35 +623,35 @@ def create_tests():
   t2d_genehits_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt");
   t2d_genehits_test.add_required_file("tests/data/diagramv2_gene_hitlist.txt");
   tests.append(t2d_genehits_test);
-  
+
   # Try using a hitspec that has only chr/start/stop in it. 
   t2d_chrpos_hitspec = Test("--prefix t2d_chrposhitspec --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --hitspec tests/data/diagram_chrposonly_hitspec.txt --delim space");
   t2d_chrpos_hitspec.title = "Testing hitspec file with only chr/start/stop";
   t2d_chrpos_hitspec.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt");
   t2d_chrpos_hitspec.add_required_file("tests/data/diagram_chrposonly_hitspec.txt");
   tests.append(t2d_chrpos_hitspec);
-  
+
   # Test when hitspec has a bad line endings (either mixed up endings, multiple different endings, etc.)
   badlineends_hitspec_test = Test("--prefix badlineends_hitspec --delim space --plotonly --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --hitspec tests/data/hitlist_badlineends.txt");
   badlineends_hitspec_test.title = "Hitspec containing multiple line endings";
   badlineends_hitspec_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt");
   badlineends_hitspec_test.add_required_file("tests/data/hitlist_badlineends.txt"); 
   tests.append(badlineends_hitspec_test); 
-  
+
   # Test when hitspec has blank lines. 
   blanklines_hitspec_test = Test("--prefix blanklines_hitspec --delim space --plotonly --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --hitspec tests/data/hitlist_blanklines.txt");
   blanklines_hitspec_test.title = "Hitspec containing blank lines";
   blanklines_hitspec_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt");
   blanklines_hitspec_test.add_required_file("tests/data/hitlist_blanklines.txt"); 
   tests.append(blanklines_hitspec_test); 
-  
+
   # Every possible legal hitspec combination. 
   t2d_hitspec_allcombos_test = Test("--prefix t2d_hitspec_allcombos_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --hitspec tests/data/hitlist_every_combo.txt --delim space");
   t2d_hitspec_allcombos_test.title = "Testing hitspec file with every possible combo of LEGAL entries";
   t2d_hitspec_allcombos_test.add_required_file("tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt");
   t2d_hitspec_allcombos_test.add_required_file("tests/data/hitlist_every_combo.txt");
   tests.append(t2d_hitspec_allcombos_test);
-  
+
   # Every possible illegal hitspec combination. 
   t2d_hitspec_badcombos_test = Test("--prefix t2d_hitspec_badcombos_test --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --hitspec tests/data/hitlist_every_bad_combo.txt --delim space");
   t2d_hitspec_badcombos_test.title = "Testing hitspec file with every possible combo of BAD entries";
@@ -638,7 +663,7 @@ def create_tests():
   allchrpos_rsid = Test("--prefix allchrpos_rsid --metal tests/data/diagramv2_SEmeta_120108_chrpos_b36_v1.tbl --refsnp rs1531343 --flank 550kb --no-cleanup");
   allchrpos_rsid.title = "Region specified with rsIDs (see next plot!)";
   tests.append(allchrpos_rsid);
-  
+
   allchrpos_chrpos = Test("--prefix allchrpos_chrpos --metal tests/data/diagramv2_SEmeta_120108_chrposONLY_b36_v1.tbl --refsnp rs1531343 --flank 550kb --no-cleanup");
   allchrpos_chrpos.title = "Region specified with only chr:pos (compare to previous)";
   tests.append(allchrpos_chrpos);
@@ -651,111 +676,111 @@ def create_tests():
   hg19_1000g_afr = Test("--prefix hg19_1000g_afr --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --refgene TCF7L2 --plotonly --delim space --source 1000G_Nov2010 --pop AFR --build hg19");
   hg19_1000g_afr.title = "hg19 / 1000G_Nov2010 / AFR";
   tests.append(hg19_1000g_afr);
-  
+
   hg19_1000g_asn = Test("--prefix hg19_1000g_asn --metal tests/data/DIAGRAMv2_EU_112808_nall_results_formetal.txt --refgene TCF7L2 --plotonly --delim space --source 1000G_Nov2010 --pop ASN --build hg19");
   hg19_1000g_asn.title = "hg19 / 1000G_Nov2010 / ASN";
   tests.append(hg19_1000g_asn);
-  
+
   # March 2012 1000G tests - TCF7L2 - DIAGRAMv4 data
   tests.append(Test(
-    "--prefix 1000g_mar2012_EUR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / EUR / hg19 / TCF7L2"
+   "--prefix 1000g_mar2012_EUR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / EUR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_AFR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / AFR / hg19 / TCF7L2"
+   "--prefix 1000g_mar2012_AFR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / AFR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_ASN_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-    title = "1000G_March2012 / ASN / hg19 / TCF7L2"
+   "--prefix 1000g_mar2012_ASN_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+   title = "1000G_March2012 / ASN / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_EUR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / EUR / hg19 / TCF7L2"
+   "--prefix 1000g_nov2010_EUR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / EUR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_AFR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / AFR / hg19 / TCF7L2"
+   "--prefix 1000g_nov2010_AFR_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / AFR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_ASN_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / ASN / hg19 / TCF7L2"
+   "--prefix 1000g_nov2010_ASN_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / ASN / hg19 / TCF7L2"
   ));
-  
+
   # March 2012 1000G tests - CDKAL1 - DIAGRAMv4 data
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_EUR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / EUR / hg19 / CDKAL1"
+   "--prefix 1000g_mar2012_EUR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / EUR / hg19 / CDKAL1"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_AFR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / AFR / hg19 / CDKAL1"
+   "--prefix 1000g_mar2012_AFR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / AFR / hg19 / CDKAL1"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_ASN_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-    title = "1000G_March2012 / ASN / hg19 / CDKAL1"
+   "--prefix 1000g_mar2012_ASN_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+   title = "1000G_March2012 / ASN / hg19 / CDKAL1"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_EUR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / EUR / hg19 / CDKAL1"
+   "--prefix 1000g_nov2010_EUR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / EUR / hg19 / CDKAL1"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_AFR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / AFR / hg19 / CDKAL1"
+   "--prefix 1000g_nov2010_AFR_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / AFR / hg19 / CDKAL1"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_ASN_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / ASN / hg19 / CDKAL1"
+   "--prefix 1000g_nov2010_ASN_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / ASN / hg19 / CDKAL1"
   ));
-  
+
   # March 2012 1000G tests - HHEX - DIAGRAMv4 data
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_EUR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / EUR / hg19 / HHEX"
+   "--prefix 1000g_mar2012_EUR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / EUR / hg19 / HHEX"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_AFR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / AFR / hg19 / HHEX"
+   "--prefix 1000g_mar2012_AFR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / AFR / hg19 / HHEX"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_ASN_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-    title = "1000G_March2012 / ASN / hg19 / HHEX"
+   "--prefix 1000g_mar2012_ASN_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+   title = "1000G_March2012 / ASN / hg19 / HHEX"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_EUR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / EUR / hg19 / HHEX"
+   "--prefix 1000g_nov2010_EUR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / EUR / hg19 / HHEX"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_AFR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / AFR / hg19 / HHEX"
+   "--prefix 1000g_nov2010_AFR_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / AFR / hg19 / HHEX"
   ));
-  
+
   tests.append(Test(
-    "--prefix 1000g_nov2010_ASN_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-    title = "1000G_Nov2010 / ASN / hg19 / HHEX"
+   "--prefix 1000g_nov2010_ASN_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+   title = "1000G_Nov2010 / ASN / hg19 / HHEX"
   ));
-  
+
   # March 2012 1000G tests - KCNQ1 - DIAGRAMv4 data
-  
+
   tests.append(Test(
-    "--prefix 1000g_mar2012_EUR_hg19_KCNQ1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-    title = "1000G_March2012 / EUR / hg19 / KCNQ1"
+   "--prefix 1000g_mar2012_EUR_hg19_KCNQ1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+   title = "1000G_March2012 / EUR / hg19 / KCNQ1"
   ));
    
   tests.append(Test(
@@ -782,82 +807,82 @@ def create_tests():
   "--prefix 1000g_nov2010_ASN_hg19_KCNQ1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop ASN --build hg19 showAnnot=F",
   title = "1000G_Nov2010 / ASN / hg19 / KCNQ1"
   ));
-  
+
   # --ld-vcf tests
 
   tests.append(Test(
-    "--prefix 1000g_mar2012_ALL_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr10.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
-    title = "1000G_March2012 / ALL / hg19 / TCF7L2 (from VCF)"
-  ));
-  
-  tests.append(Test(
-    "--prefix 1000g_mar2012_ALL_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb --no-cleanup --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr6.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
-    title = "1000G_March2012 / ALL / hg19 / CDKAL1 (from VCF)"
+   "--prefix 1000g_mar2012_ALL_hg19_TCF7L2 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region1.txt --refsnp chr10:114758349 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr10.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
+   title = "1000G_March2012 / ALL / hg19 / TCF7L2 (from VCF)"
   ));
 
   tests.append(Test(
-    "--prefix 1000g_mar2012_ALL_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr10.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
-    title = "1000G_March2012 / ALL / hg19 / HHEX (from VCF)"
-  ));
-  
-  tests.append(Test(
-    "--prefix 1000g_mar2012_ALL_hg19_KCNQ1_vcftest --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr11.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
-    title = "1000G_March2012 / ALL / hg19 / KCNQ1 (from VCF)"
+   "--prefix 1000g_mar2012_ALL_hg19_CDKAL1 --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region2.txt --refsnp chr6:20973533 --flank 250kb --no-cleanup --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr6.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
+   title = "1000G_March2012 / ALL / hg19 / CDKAL1 (from VCF)"
   ));
 
   tests.append(Test(
-    "--prefix 1000g_mar2012_ALL_hg19_KCNQ1_vcftest --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr11.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz --ld-measure dprime showAnnot=F",
-    title = "1000G_March2012 / ALL / hg19 / KCNQ1 / DPRIME (from VCF)"
+   "--prefix 1000g_mar2012_ALL_hg19_HHEX --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region3.txt --refgene HHEX --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr10.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
+   title = "1000G_March2012 / ALL / hg19 / HHEX (from VCF)"
+  ));
+
+  tests.append(Test(
+   "--prefix 1000g_mar2012_ALL_hg19_KCNQ1_vcftest --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr11.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz showAnnot=F",
+   title = "1000G_March2012 / ALL / hg19 / KCNQ1 (from VCF)"
+  ));
+
+  tests.append(Test(
+   "--prefix 1000g_mar2012_ALL_hg19_KCNQ1_vcftest --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb --no-cleanup --pop EUR --build hg19 --ld-vcf /net/1000g/1000g/release/20110521/ALL.chr11.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz --ld-measure dprime showAnnot=F",
+   title = "1000G_March2012 / ALL / hg19 / KCNQ1 / DPRIME (from VCF)"
   ));
 
   # T2DGENES P1 data - KCNQ1 - 1000G March 2012
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_EUR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / EUR / hg19 / KCNQ1"
+  "--prefix t2dgp1_1000g_mar2012_EUR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / EUR / hg19 / KCNQ1"
   ));
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AMR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AMR / hg19 / KCNQ1"
+  "--prefix t2dgp1_1000g_mar2012_AMR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / AMR / hg19 / KCNQ1"
   ));
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AFR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AFR / hg19 / KCNQ1"
+  "--prefix t2dgp1_1000g_mar2012_AFR_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / AFR / hg19 / KCNQ1"
   ));
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_ASN_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / ASN / hg19 / KCNQ1"
+  "--prefix t2dgp1_1000g_mar2012_ASN_hg19_KCNQ1 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.KCNQ1.out --refgene KCNQ1 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / ASN / hg19 / KCNQ1"
   ));
-  
+
   # T2DGENES P1 data - TCF7L2 - 1000G March 2012
   
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_EUR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / EUR / hg19 / TCF7L2"
+  "--prefix t2dgp1_1000g_mar2012_EUR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / EUR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AMR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AMR / hg19 / TCF7L2"
+  "--prefix t2dgp1_1000g_mar2012_AMR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AMR --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / AMR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_AFR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / AFR / hg19 / TCF7L2"
+  "--prefix t2dgp1_1000g_mar2012_AFR_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop AFR --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / AFR / hg19 / TCF7L2"
   ));
-  
+
   tests.append(Test(
-   "--prefix t2dgp1_1000g_mar2012_ASN_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
-   title = "T2DG-P1 1000G_March2012 / ASN / hg19 / TCF7L2"
+  "--prefix t2dgp1_1000g_mar2012_ASN_hg19_TCF7L2 --delim whitespace --markercol SNP --pvalcol P --metal tests/data/t2dgenes_p1/locuszoom.TCF7L2.out --refgene TCF7L2 --flank 250kb   --source 1000G_March2012 --no-cleanup --pop ASN --build hg19 showAnnot=F",
+  title = "T2DG-P1 1000G_March2012 / ASN / hg19 / TCF7L2"
   ));
 
   # EPACTS result file tests
   tests.append(Test(
-    "--prefix epacts_GOT2D --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr14:106332131 --ld-vcf GoT2D.chr14.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
-    title = "EPACTS / GOT2D / LD-VCF"
+   "--prefix epacts_GOT2D --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr14:106332131 --ld-vcf tests/data/GoT2D.chr14.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
+   title = "EPACTS / GOT2D / LD-VCF"
   ));
 
   # GWAS catalog tests
@@ -876,7 +901,8 @@ def main():
     bin="src/m2zfast.py",
     args=[],
     run_dir="tests/results",
-    log_file="log_file.txt"
+    log_file="log_file.txt",
+    multi=5
    );
 
   print "Adding test cases to testing suites..";
