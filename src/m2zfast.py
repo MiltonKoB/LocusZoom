@@ -672,6 +672,8 @@ def runM2Z(metal,metal2zoom_path,ld_files,refsnp,chr,start,end,no_snp_name,verbo
   conf = getConf();
 
   rscript_path = find_systematic(conf.RSCRIPT_PATH);
+  if rscript_path == None:
+    die("Error: could not locate Rscript interpreter. It either needs to be located on your PATH, or set on the configuration file.");
 
   # If no LD file was created, make m2z use the database instead. 
   if (ld_files == None) or (len(ld_files) == 0):
