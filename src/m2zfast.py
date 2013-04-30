@@ -980,6 +980,54 @@ class SNP:
   def __str__(self):
     return self.snp;
 
+def parse_denote_marker_file(filepath,sqlite_file):
+  find_pos = PosLookup(sqlite_file);
+  
+  out_name = "temp_denote_marker_" + tempfile.mktemp(dir="");
+  with open(filepath) as f, open(out_name,'w') as out:
+    header = f.readline().rstrip().split("\t");
+    for hitem in ('snp','string'):
+      try:
+        header.index(hitem);
+      except:
+        die("Error: file given for --denote-markers-file does not have the proper header.");
+
+    header.insert(1,'chrpos');
+    header.insert(2,'chr');
+    header.insert(3,'pos');
+    print >> out, "\t".join(header);
+
+    for line in f:
+      e = line.split("\t");
+      e[-1] = e[-1].rstrip();
+
+      snp = e[0];
+      (chrom,pos) = find_pos(snp);
+
+      if chrom == None or pos == None:
+        print >> sys.stderr, "Error: could not find position for SNP %s in file given by --denote-markers-file, skipping.." % snp;
+        continue;
+
+      snp_chrpos = "chr%s:%s" % (chrom,pos);
+
+      e.insert(1,snp_chrpos);
+      e.insert(2,chrom);
+      e.insert(3,pos);
+
+      print >> out, "\t".join(map(str,e));
+
+  return out_name;
+
+#csnp = SNP(snp=csnp);
+#csnp.tsnp = transSNP(csnp.snp,opts.sqlite_db_file);
+#(csnp_chr,csnp_pos) = find_pos(csnp.tsnp);
+
+#csnp.chr = csnp_chr;
+#csnp.pos = csnp_pos;
+#csnp.chrpos = "chr%s:%s" % (csnp_chr,csnp_pos);
+
+#cond_snps_chrpos.append(csnp);
+
 # Parse command line arguments and return a tuple (opts,args) where:
 # opts - settings that are specific to the program and have been error-checked
 # opts looks like an object, settings are of the form: opt.some_setting
@@ -998,6 +1046,7 @@ def getSettings():
   parser.add_option("--hitspec",dest="hitspec",help="File containing a list of SNPs, chromosome, start, and stop.");
   parser.add_option("--refsnp",dest="refsnp",help="Create region plot around this reference SNP.");
   parser.add_option("--conditional",dest="condsnps",help="Designate conditional / second signal SNPs.");
+  parser.add_option("--denote-markers-file",dest="denote_markers_file",help="Designate additional markers to highlight on the plot with a file.");
   parser.add_option("--refgene",dest="refgene",help="Create region plot flanking a gene.");
   parser.add_option("--flank",dest="flank",help="Distance around refsnp to plot.");
   parser.add_option("--chr",dest="chr",help="Chromosome that refsnp is located on - this is only used for sanity checking, but it is good to include.");
@@ -1249,6 +1298,14 @@ def getSettings():
       cond_snps_chrpos.append(csnp);
 
     opts.condsnps = cond_snps_chrpos;
+
+  # If specified, check the denote markers file. 
+  if opts.denote_markers_file:
+    denote_file = find_systematic(opts.denote_markers_file);
+    if denote_file == None:
+      die("Error: could not find file specified by --denote-markers-file: %s" % opts.denote_markers_file);
+    else:
+      opts.denote_markers_file = denote_file;
 
   # Compute start/end positions for each SNP, unless already specified and in refsnp mode.
   opts.snplist = [];
@@ -1723,6 +1780,11 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   # GWAS catalog.
   if opts.gwas_cat_file != None:
     args += " gwasHits=%s" % opts.gwas_cat_file;
+
+  # Marker denote file. 
+  if opts.denote_markers_file:
+    denote_file = parse_denote_marker_file(opts.denote_markers_file,opts.sqlite_db_file);
+    args += " denoteMarkersFile=%s" % denote_file;
 
   print "Creating plot..";
 

@@ -1,0 +1,21 @@
+# EPACTS result file tests
+tests.append(Test(
+ "--prefix epacts_GOT2D --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr14:106332131 --ld-vcf tests/data/GoT2D.chr14.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
+ title = "EPACTS / GOT2D / LD-VCF"
+));
+
+tests.append(Test(
+ "--prefix epacts_GOT2D --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr14:106332131 --build hg19 --pop EUR --source 1000G_March2012 showAnnot=F",
+ title = "EPACTS / GOT2D / LD-PLINK (should look similar to prev)"
+));
+
+# GWAS catalog tests
+tests.append(Test(
+"--prefix 1000g_nov2010_EUR_hg19_KCNQ1_gwascat --gwas-cat whole-cat_significant-only --markercol SNPID --pvalcol PVAL --metal tests/data/DIAGRAMv4_iSNPs_FUSION_1000G_MAR12_WLD_121012_PK_noindels_chrpos_tabdelim_test-region4.txt --refgene KCNQ1 --flank 250kb   --source 1000G_Nov2010 --no-cleanup --pop EUR --build hg19 showAnnot=F",
+title = "NHGRI GWAS / hg19 / KCNQ1"
+));
+
+# Test denote markers
+tests.append(Test(
+"--prefix denote_marker_test --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black' --denote-markers-file tests/data/test_marker_denote"
+));

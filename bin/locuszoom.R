@@ -494,7 +494,7 @@ AdjustModesOfArgs <- function(args) {
         as.numeric);
 
     args <- sublapply(args,
-        c('metal','recomb','ld','refSnpPosFile','snpsetFile','annot','refFlat'),
+        c('metal','recomb','ld','refSnpPosFile','snpsetFile','annot','refFlat','denoteMarkersFile'),
         as.filename);
 
     args <- sublapply(args,
@@ -737,20 +737,50 @@ flatten.bed <- function(x,multiplier=.001) {
     invisible(df);
 }
 
-grid.refsnp <- function(name,pos,pval,draw.name=TRUE) {
+grid.refsnp <- function(name,pos,pval,draw.name=TRUE,label=NULL,color=NULL) {
 
   if (draw.name) {
-    grid.text(
-      as.character(name),
-      x=unit(pos,"native"), 
-      y=unit(pval,'native') + unit(0.075,'npc'), 
-      just=c("center","top"),
-      gp=gpar(
-        cex=args[['refsnpTextSize']],
-        col=args[['refsnpTextColor']],
-        alpha=args[['refsnpTextAlpha']]
-      )
-    );
+    # Figure out text height. 
+    text_height = grobHeight(textGrob(as.character(name),gp = gpar(cex = args[['refsnpTextSize']])));
+    
+    if (!is.null(label) && !is.na(label) && label != "") {
+      grid.text(
+        as.character(label),
+        x=unit(pos,"native"), 
+        y=unit(pval,'native') + unit(1.15,'lines'),
+        just=c("center","top"),
+        gp=gpar(
+          cex=args[['refsnpTextSize']],
+          col=ifelse(is.null(color) || is.na(color),args[['refsnpTextColor']],color),
+          alpha=args[['refsnpTextAlpha']]
+        )
+      );
+      
+      grid.text(
+        as.character(name),
+        x=unit(pos,"native"), 
+        y=unit(pval,'native') + unit(1.15,'lines') + text_height + unit(0.25,'lines'),
+        just=c("center","top"),
+        gp=gpar(
+          cex=args[['refsnpTextSize']],
+          col=ifelse(is.null(color) || is.na(color),args[['refsnpTextColor']],color),
+          alpha=args[['refsnpTextAlpha']]
+        )
+      );
+      
+    } else {
+      grid.text(
+        as.character(name),
+        x=unit(pos,"native"), 
+        y=unit(pval,'native') + unit(1.15,'lines'), 
+        just=c("center","top"),
+        gp=gpar(
+          cex=args[['refsnpTextSize']],
+          col=ifelse(is.null(color) || is.na(color),args[['refsnpTextColor']],color),
+          alpha=args[['refsnpTextAlpha']]
+        )
+      );
+    }
   }
   
   grid.segments(
@@ -1965,42 +1995,58 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     
   }
   
-  # Draw label for reference SNP. 
-  # This is either the label a user provides, or the actual reference SNP rs#. 
-  if (! is.null(refidx)) {
-    if (!is.null(args[['refsnpName']])) {
-      # User-provided refsnp label. 
-      grid.refsnp(args[['refsnpName']],metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
-    } else{
-      # Use the actual SNP name. 
-      grid.refsnp(refSnp,metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
+  # Now we need to label the lead SNPs. 
+  # If a "denoteMarkersFile" was specified, this has all the information we need
+  # to do the labeling, so we'll use it directly. 
+  #
+  # Otherwise, we'll label each reference/conditional SNP accordingly. 
+  if (!is.null(denote_markers)) {
+    for (i in 1:dim(denote_markers)[1]) {
+      denote_row = denote_markers[i,];
+      
+      metal_data = as.list(metal[metal$MarkerName == denote_row$chrpos,]);
+      metal_pval = transformation(metal_data$P.value);
+      
+      grid.refsnp(denote_row$snp,denote_row$pos,metal_pval,args[['drawMarkerNames']],denote_row$string,denote_row$color);
     }
-  }
-  
-  # If conditional SNPs were given, we should also label those too. 
-  if (!is.null(cond_ld)) {
-    for (i in 1:length(ref_cond_snps)) {
-      csnp = ref_cond_snps[i];
-      csnp_name = ref_cond_snps_names[i];
-      
-      if (csnp == refSnp) {
-        next;
+  } else {
+    # Draw label for reference SNP. 
+    # This is either the label a user provides, or the actual reference SNP rs#. 
+    if (! is.null(refidx)) {
+      if (!is.null(args[['refsnpName']])) {
+        # User-provided refsnp label. 
+        grid.refsnp(args[['refsnpName']],metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
+      } else{
+        # Use the actual SNP name. 
+        grid.refsnp(refSnp,metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
       }
-      
-      csnp_data = as.list(metal[metal$MarkerName == csnp,]);
-      csnp_pval = transformation(csnp_data$P.value);
-      # grid.text(
-        # as.character(csnp),
-        # x = unit(csnp_data$pos,"native"), 
-        # y = unit(csnp_pval,'native') + unit(0.1,'npc'),
-        # just = c("center","top"),
-        # gp = gpar(
-          # cex=args[['refsnpTextSize']],
-          # col=args[['refsnpTextColor']],
-          # alpha=args[['refsnpTextAlpha']]
-        # )
-      # );
-      grid.refsnp(csnp_name,csnp_data$pos,csnp_pval,args[['drawMarkerNames']]);
+    }
+    
+    # If conditional SNPs were given, we should also label those too. 
+    if (!is.null(cond_ld)) {
+      for (i in 1:length(ref_cond_snps)) {
+        csnp = ref_cond_snps[i];
+        csnp_name = ref_cond_snps_names[i];
+        
+        if (csnp == refSnp) {
+          next;
+        }
+        
+        csnp_data = as.list(metal[metal$MarkerName == csnp,]);
+        csnp_pval = transformation(csnp_data$P.value);
+        # grid.text(
+          # as.character(csnp),
+          # x = unit(csnp_data$pos,"native"), 
+          # y = unit(csnp_pval,'native') + unit(0.1,'npc'),
+          # just = c("center","top"),
+          # gp = gpar(
+            # cex=args[['refsnpTextSize']],
+            # col=args[['refsnpTextColor']],
+            # alpha=args[['refsnpTextAlpha']]
+          # )
+        # );
+        grid.refsnp(csnp_name,csnp_data$pos,csnp_pval,args[['drawMarkerNames']]);
+      }
     }
   }
     
@@ -2635,6 +2681,7 @@ default.args <- list(
   refsnp = NULL,                        # snp name (string)
   refsnpName = NULL,                    # name given to refsnp on plot (usually same as refsnp)
   drawMarkerNames = TRUE,               # draw the rs# SNP names above them?
+  denoteMarkersFile = NULL,              # file specifying marker names to highlight (along with brief label and/or color)
   refsnpTextColor = "black",            # color for ref snp label
   refsnpTextSize = 1,                   # sclaing factor for text size
   refsnpTextAlpha = 1,                  # alpha for ref snp label
@@ -3313,10 +3360,24 @@ if ( is.null(args[['reload']]) ) {
 
   # subset gwas hits to plotting region
   if (!is.null(gwas_hits)) {
-    s_gwas = (gwas_hits$chr == args[['chr']]) & (gwas_hits$pos <= args[['endBP']] / 1E6) & (gwas_hits$pos >= args[['startBP']] / 1E6);
-    gwas_hits = subset(gwas_hits,s_gwas);
+    b_gwas = (gwas_hits$chr == args[['chr']]) & (gwas_hits$pos <= args[['endBP']] / 1E6) & (gwas_hits$pos >= args[['startBP']] / 1E6);
+    gwas_hits = subset(gwas_hits,b_gwas);
   }
   summary(gwas_hits);
+  
+  # load marker denote, if available
+  denote_markers = NULL;
+  if (!is.null(args[['denoteMarkersFile']])) {
+    denote_markers = read.table(args[['denoteMarkersFile']],header=T,sep="\t",comment.char="",stringsAsFactors=F);
+    
+    b_denote = (denote_markers$chr == args[['chr']]) & (denote_markers$pos <= args[['endBP']]) & (denote_markers$pos >= args[['startBP']]);
+    denote_markers = denote_markers[b_denote,];
+    denote_markers$pos = denote_markers$pos / 1E6;
+    
+    if (!"color" %in% names(denote_markers)) {
+      denote_markers$color = "black";
+    }
+  }
 
   # adjust for position units
   metal$pos <- metal$pos / args[['unit']];
