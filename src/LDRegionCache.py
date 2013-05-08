@@ -38,7 +38,12 @@ class LDRegionCache():
       print >> sys.stderr, "Accessing LD cache: %s" % dbfile;
       existed = True;
     
-    self.db = shelve.open(dbfile);
+    try:
+      self.db = shelve.open(dbfile);
+      self.opened = True;
+    except:
+      self.opened = False;
+      raise;
 
     # Check protocol. 
     proto = self.db.get('proto');
@@ -99,16 +104,21 @@ class LDRegionCache():
 
     return False;
 
+  def close(self):
+    if self.opened:
+      lock = FileLock(self.dbfile);
+      lock.acquire();
+
+      # Update database.
+      if self.root != None:
+        self.db[self.key] = self.root;
+        self.db.close();
+
+      # Release lock. 
+      lock.release();
+    
+      # Set object to closed state. 
+      self.opened = False;
+
   def __del__(self):
-    # Acquire lock to perform update.
-    lock = FileLock(self.dbfile);
-    lock.acquire();
-
-    # Update database.
-    if self.root != None:
-      self.db[self.key] = self.root;
-      self.db.close();
-
-    # Release lock. 
-    lock.release();
-
+    self.close();

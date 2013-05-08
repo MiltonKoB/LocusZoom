@@ -67,7 +67,7 @@ except:
 # Program strings.
 M2ZFAST_VERSION = "1.2";
 M2ZFAST_TITLE = "+---------------------------------------------+\n"\
-                "| LocusZoom 1.2 (02/15/2013)                  |\n"\
+                "| LocusZoom 1.2 (05/09/2013)                  |\n"\
                 "| Plot regional association results           |\n"\
                 "| from GWA scans or candidate gene studies    |\n"\
                 "+---------------------------------------------+\n";
@@ -1039,7 +1039,8 @@ def getSettings():
   parser.add_option("--cache",dest="cache",help="Change the location of the cache file to use for LD. Set to 'None' to disable.");
   parser.add_option("--hitspec",dest="hitspec",help="File containing a list of SNPs, chromosome, start, and stop.");
   parser.add_option("--refsnp",dest="refsnp",help="Create region plot around this reference SNP.");
-  parser.add_option("--conditional",dest="condsnps",help="Designate conditional / second signal SNPs.");
+  parser.add_option("--add-refsnps",dest="condsnps",help="Plot LD with additional SNPs.");
+  parser.add_option("--conditional",dest="cond_compat",help=SUPPRESS_HELP); # backward compat, same as above option
   parser.add_option("--denote-markers-file",dest="denote_markers_file",help="Designate additional markers to highlight on the plot with a file.");
   parser.add_option("--refgene",dest="refgene",help="Create region plot flanking a gene.");
   parser.add_option("--flank",dest="flank",help="Distance around refsnp to plot.");
@@ -1276,7 +1277,10 @@ def getSettings():
     opts.refsnp.chr = chr;
     opts.refsnp.pos = pos;
 
-  # If the user specified conditional / second signal SNPs, parse these into chr/pos. 
+  # If the user specified conditional / second signal SNPs, parse these into chr/pos.
+  if opts.cond_compat != None:
+    opts.condsnps = opts.cond_compat; # if user gave --conditional (old option) use this
+
   if opts.condsnps:
     cond_snps = [i.strip() for i in opts.condsnps.split(",")];
     cond_snps_chrpos = list();
@@ -1485,21 +1489,25 @@ def computeLD(snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbos
   elif isinstance(settings,PlinkSettings):
     ld_finder = PlinkFinder(settings,cache,fugue_cleanup,verbose);
 
-  ld_success = ld_finder.compute(snp.chrpos,chr,start,end);
-  if ld_success:
-    ld_filename = "templd_" + snp.snp + "_" + time.strftime("%y%m%d",time.localtime()) + "-" + time.strftime("%H%M%S",time.localtime()) + ".txt";
+  try:
+    ld_success = ld_finder.compute(snp.chrpos,chr,start,end);
+    if ld_success:
+      ld_filename = "templd_" + snp.snp + "_" + time.strftime("%y%m%d",time.localtime()) + "-" + time.strftime("%H%M%S",time.localtime()) + ".txt";
     
-    if os.path.isfile(ld_filename):
-      print >> sys.stderr, "Warning: LD file already exists for some reason: %s" % ld_filename;
+      if os.path.isfile(ld_filename):
+        print >> sys.stderr, "Warning: LD file already exists for some reason: %s" % ld_filename;
 
-    write_success = ld_finder.write(ld_filename);
+      write_success = ld_finder.write(ld_filename);
     
-    if not write_success:
+      if not write_success:
+        ld_filename = None;
+    else:
+      print >> sys.stderr, "Warning: LD could not be computed for SNP %s. "\
+      "This SNP does not exist in the genotype files for computing LD from %s/%s/%s.." % (str(snp),source,build,pop);
       ld_filename = None;
-  else:
-    print >> sys.stderr, "Warning: LD could not be computed for SNP %s. "\
-    "This SNP does not exist in the genotype files for computing LD from %s/%s/%s.." % (str(snp),source,build,pop);
-    ld_filename = None;
+  finally:
+    if cache != None:
+      cache.close();
 
   return ld_filename;
 

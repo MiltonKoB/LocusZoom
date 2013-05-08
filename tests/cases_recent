@@ -1,40 +1,7 @@
-# EPACTS result file tests
 tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldvcf_chr3 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr3:123051019 --build hg19 --ld-vcf tests/data/GoT2D.chr3.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
- title = "EPACTS / GOT2D / LD-VCF"
+"--prefix addrefsnptest1 --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --add-refsnps 'rs17066842,rs9944545' --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'"
 ));
 
 tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldplink_chr3 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr3:123051019 --build hg19 --pop EUR --source 1000G_March2012 showAnnot=F",
- title = "EPACTS / GOT2D / LD-PLINK (should look similar to prev)"
-));
-
-tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldvcf_chr10 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr10:114754784 --build hg19 --ld-vcf tests/data/GoT2D.chr10.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
- title = "EPACTS / GOT2D / LD-VCF"
-));
-
-tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldplink_chr10 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr10:114754784 --build hg19 --pop EUR --source 1000G_March2012 showAnnot=F",
- title = "EPACTS / GOT2D / LD-PLINK (should look similar to prev)"
-));
-
-tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldvcf_chr12 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr12:4384844 --build hg19 --ld-vcf tests/data/GoT2D.chr12.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
- title = "EPACTS / GOT2D / LD-VCF"
-));
-
-tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldplink_chr12 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr12:4384844 --build hg19 --pop EUR --source 1000G_March2012 showAnnot=F",
- title = "EPACTS / GOT2D / LD-PLINK (should look similar to prev)"
-));
-
-tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldvcf_chr2 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr2:42408681 --build hg19 --ld-vcf tests/data/GoT2D.chr2.final_integrated_snps_indels_sv_beagle_thunder_20121121.vcf.gz showAnnot=F",
- title = "EPACTS / GOT2D / LD-VCF"
-));
-
-tests.append(Test(
- "--no-cleanup --prefix epacts_GOT2D_ldplink_chr2 --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refsnp chr2:42408681 --build hg19 --pop EUR --source 1000G_March2012 showAnnot=F",
- title = "EPACTS / GOT2D / LD-PLINK (should look similar to prev)"
-));
+"--prefix addrefsnptest2 --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --conditional 'rs17066842,rs9944545' --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'"
+,title="Same as previous, just with --conditional not --add-refsnps"));

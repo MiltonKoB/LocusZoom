@@ -217,7 +217,7 @@ class TestSuite():
       log.close();
 
 class Test():
-  def __init__(self,cmd_string,out_file=None,title="",timeout=-1,should_fail=False):
+  def __init__(self,cmd_string,out_file=None,title="",timeout=-1,should_fail=False,delay=None):
     # Set before execution:
     self.id = None; 
     self.title = title;
@@ -227,6 +227,7 @@ class Test():
     self.timeout = timeout;
     self.gold_standard = "";
     self.should_fail = should_fail;
+    self.delay = delay;
 
     self.out_file = out_file;
     self.out_lock = None;
@@ -248,6 +249,9 @@ class Test():
     return self.run();
 
   def run(self):
+    if self.delay != None:
+      time.sleep(self.delay);
+
     self.files = [];
     self.pdfs = [];
 

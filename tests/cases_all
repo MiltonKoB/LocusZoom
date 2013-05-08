@@ -596,3 +596,29 @@ tests.append(Test(
 "--prefix denote_marker_test --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black' --denote-markers-file tests/data/test_marker_denote"
 ));
 
+# Test cases for plotting LD with additional ref SNPs. 
+tests.append(Test(
+"--prefix addrefsnptest1 --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --add-refsnps 'rs17066842,rs9944545' --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'"
+));
+
+tests.append(Test(
+"--prefix addrefsnptest2 --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --conditional 'rs17066842,rs9944545' --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'"
+,title="Same as previous, just with --conditional not --add-refsnps"));
+
+# Tests for ld_cache (plot a region multiple times)
+tests.append(Test(
+"--prefix ldcache1 --cache ../../ld_cache_tests.db --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'",
+title="Fresh LD cache"
+));
+
+tests.append(Test(
+"--prefix ldcache2 --cache ../../ld_cache_tests.db --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'",
+title="Using LD cache from previous run",
+delay=30)
+);
+
+tests.append(Test(
+"--prefix ldcache3 --cache ../../ld_cache_tests.db --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'",
+title="Using LD cache from previous run",
+delay=60)
+);
