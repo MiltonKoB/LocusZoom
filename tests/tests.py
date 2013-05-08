@@ -129,6 +129,8 @@ class TestSuite():
 
   def run_all(self):
     cwd = os.getcwd();
+
+    print "Running %i tests.." % len(self.tests);
     
     # Try to change to run directory. 
     os.chdir(self.run_dir);
@@ -148,7 +150,7 @@ class TestSuite():
       raise ValueError, "Error: must give a log file name by log_file= parameter.";
 
     # Run tests. 
-    pool = Pool(self.multi);
+    pool = Pool(self.multi,maxtasksperchild=1);
     proc_results = [];
     for test in self.tests:
       if test.bin == None:
@@ -215,7 +217,7 @@ class TestSuite():
       log.close();
 
 class Test():
-  def __init__(self,cmd_string,out_file=None,title="",timeout=-1):
+  def __init__(self,cmd_string,out_file=None,title="",timeout=-1,should_fail=False):
     # Set before execution:
     self.id = None; 
     self.title = title;
@@ -224,7 +226,7 @@ class Test():
     self.required_files = [];
     self.timeout = timeout;
     self.gold_standard = "";
-    self.should_fail = False;
+    self.should_fail = should_fail;
 
     self.out_file = out_file;
     self.out_lock = None;
@@ -333,7 +335,7 @@ class Test():
     self.out_lock.acquire();
     print self.out_file;
     with open(self.out_file,"a") as out:
-      out.write("$ Test [%i]: %s" % (self.id,self.title));
+      out.write("$ Test [%i]: %s\n" % (self.id,self.title));
       out.write(proc_string);
       out.write("\n");
     self.out_lock.release();

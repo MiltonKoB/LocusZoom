@@ -44,7 +44,7 @@ def geno_to_code(g):
   elif g == '11':
     return 2;
   else:
-    raise Exception; 
+    raise Exception, "Error: genotypes from VCF have more than 4 possible states (more than 2 ordered alleles.)";
 
 def haplo_to_code(g):
   if g[1] != "|":
@@ -94,7 +94,14 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
     return;
 
   index_rec = stdout.rstrip().split("\t");
-  index_gts = map(geno_to_code,index_rec[9:]);
+  try:
+    index_gts = map(geno_to_code,index_rec[9:]);
+  except Exception as e:
+    # If we're here, either: 
+    # 1) the index SNP was not biallelic, or
+    # 2) the index SNP had genotypes that were not phased
+    print >> sys.stderr, e.message;
+    return None;
 
   (index_ref,index_alt) = index_rec[3:5];
 
@@ -158,7 +165,10 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
         continue;
 
       # Genotypes, converted to 0/1/2 coding
-      gts = map(geno_to_code,rec[9:]);
+      try:
+        gts = map(geno_to_code,rec[9:]);
+      except:
+        continue;
 
       # Calculate r2. 
       rsq = rsquared(index_gts,gts);

@@ -676,15 +676,19 @@ def runM2Z(metal,metal2zoom_path,ld_files,refsnp,chr,start,end,no_snp_name,verbo
     die("Error: could not locate Rscript interpreter. It either needs to be located on your PATH, or set on the configuration file.");
 
   # If no LD file was created, make m2z use the database instead. 
+  refsnp_ld = "NULL";
+  cond_ld = "";
   if (ld_files == None) or (len(ld_files) == 0):
-    refsnp_ld = "NULL";
-    cond_ld = "";
+    pass
   else:
-    refsnp_ld = ld_files[0];
-    if len(ld_files) > 1:
-      cond_ld = "cond_ld=" + ",".join(ld_files[1:]);
+    if isinstance(ld_files,type('str')):
+      refsnp_ld = ld_files;
     else:
-      cond_ld = "";
+      refsnp_ld = ld_files[0];
+      if len(ld_files) > 1:
+        cond_ld = "cond_ld=" + ",".join(ld_files[1:]);
+      else:
+        cond_ld = "";
   
   cond_pos = "";
   cond_snps = "";
@@ -1005,7 +1009,7 @@ def parse_denote_marker_file(filepath,sqlite_file):
       (chrom,pos) = find_pos(snp);
 
       if chrom == None or pos == None:
-        print >> sys.stderr, "Error: could not find position for SNP %s in file given by --denote-markers-file, skipping.." % snp;
+        print >> sys.stderr, "Warning: could not find position for SNP %s in file given by --denote-markers-file, skipping.." % snp;
         continue;
 
       snp_chrpos = "chr%s:%s" % (chrom,pos);
@@ -1017,16 +1021,6 @@ def parse_denote_marker_file(filepath,sqlite_file):
       print >> out, "\t".join(map(str,e));
 
   return out_name;
-
-#csnp = SNP(snp=csnp);
-#csnp.tsnp = transSNP(csnp.snp,opts.sqlite_db_file);
-#(csnp_chr,csnp_pos) = find_pos(csnp.tsnp);
-
-#csnp.chr = csnp_chr;
-#csnp.pos = csnp_pos;
-#csnp.chrpos = "chr%s:%s" % (csnp_chr,csnp_pos);
-
-#cond_snps_chrpos.append(csnp);
 
 # Parse command line arguments and return a tuple (opts,args) where:
 # opts - settings that are specific to the program and have been error-checked
