@@ -11,6 +11,11 @@ Features added:
 -- support for March 2012 1000G for computing LD (ASN, AFR, EUR, AMR)
 -- lifted over variant annotations from hg18 to hg19
 -- updated SNP positions and gene boundaries from snp137 and latest refFlat (as of 2013-01-22)
+-- added support for plotting LD with multiple reference SNPs
+-- plot credible sets of SNPs from fine-mapping results as a separate track
+-- plot GWAS catalog SNPs as a separate track
+-- calculate LD from VCF files
+-- load EPACTs result files directly
 
 1.1:
 ----
