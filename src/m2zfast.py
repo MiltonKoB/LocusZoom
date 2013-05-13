@@ -988,37 +988,38 @@ def parse_denote_marker_file(filepath,sqlite_file):
   find_pos = PosLookup(sqlite_file);
   
   out_name = "temp_denote_marker_" + tempfile.mktemp(dir="");
-  with open(filepath) as f, open(out_name,'w') as out:
-    header = f.readline().rstrip().split("\t");
-    for hitem in ('snp','string'):
-      try:
-        header.index(hitem);
-      except:
-        die("Error: file given for --denote-markers-file does not have the proper header.");
+  with open(filepath) as f:
+    with open(out_name,'w') as out:
+      header = f.readline().rstrip().split("\t");
+      for hitem in ('snp','string'):
+        try:
+          header.index(hitem);
+        except:
+          die("Error: file given for --denote-markers-file does not have the proper header.");
 
-    header.insert(1,'chrpos');
-    header.insert(2,'chr');
-    header.insert(3,'pos');
-    print >> out, "\t".join(header);
+      header.insert(1,'chrpos');
+      header.insert(2,'chr');
+      header.insert(3,'pos');
+      print >> out, "\t".join(header);
 
-    for line in f:
-      e = line.split("\t");
-      e[-1] = e[-1].rstrip();
+      for line in f:
+        e = line.split("\t");
+        e[-1] = e[-1].rstrip();
 
-      snp = e[0];
-      (chrom,pos) = find_pos(snp);
+        snp = e[0];
+        (chrom,pos) = find_pos(snp);
 
-      if chrom == None or pos == None:
-        print >> sys.stderr, "Warning: could not find position for SNP %s in file given by --denote-markers-file, skipping.." % snp;
-        continue;
+        if chrom == None or pos == None:
+          print >> sys.stderr, "Warning: could not find position for SNP %s in file given by --denote-markers-file, skipping.." % snp;
+          continue;
 
-      snp_chrpos = "chr%s:%s" % (chrom,pos);
+        snp_chrpos = "chr%s:%s" % (chrom,pos);
 
-      e.insert(1,snp_chrpos);
-      e.insert(2,chrom);
-      e.insert(3,pos);
+        e.insert(1,snp_chrpos);
+        e.insert(2,chrom);
+        e.insert(3,pos);
 
-      print >> out, "\t".join(map(str,e));
+        print >> out, "\t".join(map(str,e));
 
   return out_name;
 

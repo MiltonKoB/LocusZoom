@@ -1,7 +1,3 @@
 tests.append(Test(
-"--prefix addrefsnptest1 --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --add-refsnps 'rs17066842,rs9944545' --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'"
+"--prefix denote_marker_test --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black' --denote-markers-file tests/data/test_marker_denote"
 ));
-
-tests.append(Test(
-"--prefix addrefsnptest2 --metal tests/data/BMI_meta_analysis.tbl.gz --refsnp rs6567160 --conditional 'rs17066842,rs9944545' --flank 250kb --build hg18 --source 1000G_June2010 --pop CEU refsnpLineColor='black'"
-,title="Same as previous, just with --conditional not --add-refsnps"));
