@@ -414,14 +414,16 @@ def is_gzip(file):
   return b;
   
 def is_bz2(file):
-  b = False;
   try:
     f = bz2.BZ2File(file);
+  except:
+    return False;
+
+  try:
     f.read(1024);
-    f.close();
     b = True;
   except:
-    pass
+    b = False;
   finally:
     f.close();
 
@@ -517,6 +519,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
     e[-1] = e[-1].rstrip();
 
     snp = e[snp_col];
+    snp = snp.lower(); # sometimes people put in RS39393 or CHR9:19191...
 
     # Is this a 1000G SNP? If so, we can pull the position from it.
     gcheck = parse1000G(snp);
@@ -823,6 +826,11 @@ def readWhitespaceHitList(file,db_file):
       flank = convertFlank(flank);
       if flank == None:
         die("Error: could not parse flank \"%s\", format incorrect." % e[4]);
+
+    # If they messed up and put "RS" instead of "rs" in the SNP name, fix it. 
+    # The only case in which I can't be sure to fix it is if the gene is RS1. 
+    if snp != "RS1":
+      snp = re.sub("^RS(\d+)","rs\\1",snp);
 
     if isSNP(snp):
       snp = SNP(snp=snp);
