@@ -1275,13 +1275,17 @@ panel.flatbed <- function (
     fill = df1$col
   }
 
-  grid.rect(x = multiplier + df1$start, width = df1$width, 
-    just = "left", 
-    y = yPos(df1$idnum),
-    height = unit(height * increment, "npc"), 
-    default.units = "native", 
-    gp = gpar(fill = fill, col = col, alpha = alpha)
-  );
+  if (dim(df1)[1] > 0) {
+    grid.rect(
+      x = multiplier + df1$start, 
+      width = df1$width, 
+      just = "left", 
+      y = yPos(df1$idnum),
+      height = unit(height * increment, "npc"), 
+      default.units = "native", 
+      gp = gpar(fill = fill, col = col, alpha = alpha)
+    );
+  }
 
   if ( "textcol" %in% names(df0uniq) ) {
     textcol = df0uniq$textcol
