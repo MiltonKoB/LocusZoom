@@ -727,7 +727,7 @@ flatten.bed <- function(x,multiplier=.001) {
             stop = c(x$txEnd, x$cdsEnd, blockEnd ),
             type = c(rep(0,lx),rep(2,lx), rep(1,length(startDup))),
             name = c(x$geneName, x$geneName, nameDup),
-            nmName = c(x$name, x$name, nameDup),
+            nmName = c(x$name, x$name, nmNameDup),
             strand = c(x$strand, x$strand, strandDup)
             );
 
