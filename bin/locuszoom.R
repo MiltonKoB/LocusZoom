@@ -490,7 +490,7 @@ AdjustModesOfArgs <- function(args) {
           'frameAlpha','hiAlpha','rugAlpha',
           'refsnpLineAlpha', 'recombFillAlpha','recombLineAlpha', 'refsnpTextAlpha', 'refsnpLineWidth',
           'ymin','ymax','legendSize','refsnpTextSize','axisSize','axisTextSize','geneFontSize','smallDot',
-          'largeDot','refDot','signifLine','ldThresh'),
+          'largeDot','refDot','signifLine','ldThresh','rightMarginLines'),
         as.numeric);
 
     args <- sublapply(args,
@@ -1495,6 +1495,85 @@ panel.finemap <- function (
   
 }
 
+# bed_tracks is a data frame with: chr, start, end, name, score, strand, thickStart, thickEnd, itemRgb
+panel.bed <- function(bed_data,track_height,startbp,endbp) {
+  # compute colors
+  if ("itemRgb" %in% names(bed_data)) {
+    bed_data$color = sapply(bed_data$itemRgb,function(x) { do.call(rgb,c(as.list(unlist(strsplit(x,","))),maxColorValue=255)) });
+    
+    is_white = bed_data$color == "#FFFFFF";
+    bed_data[is_white,]$color = "#E5E5E5";
+  } else {
+    bed_data$color = "black";
+  }  
+  
+  startbp = startbp / 1E6;
+  endbp = endbp / 1E6;
+    
+  # Chop off edges that go off the plot. 
+  bed_data$start = sapply(bed_data$start,function(x) max(x,startbp));
+  bed_data$end = sapply(bed_data$end,function(x) min(x,endbp));
+  
+  # plot each sub-track separately
+  sub_tracks = sort(unique(bed_data$name));
+  i = 0;
+  for (sub_name in sub_tracks) {
+    bed_sub = subset(bed_data,name == sub_name);
+  
+    # Combine regions that overlap to avoid overplotting
+    if (dim(bed_sub)[1] > 1) {
+      # Only need to do this check when there's more than 1 row :) 
+      
+      bed_sub = bed_sub[order(bed_sub$start),];
+      for (j in (2:(dim(bed_sub)[1]))) {
+        if (bed_sub$start[j] <= bed_sub$end[j-1]) {
+          bed_sub$start[j] = bed_sub$start[j-1];
+          bed_sub$start[j-1] = NA;
+        }
+      }
+      bed_sub = subset(bed_sub,!is.na(bed_sub$start));
+    }
+    
+    bed_sub$width = abs(bed_sub$end - bed_sub$start);
+  
+    y_mid = (0.5 * track_height) + (i * track_height);
+    
+    #bed_sub$y0 = y_mid - (0.25 * track_height);
+    #bed_sub$y1 = y_mid + (0.25 * track_height);
+        
+    grid.rect(
+      x = unit(bed_sub$start,'native'),
+      y = unit(y_mid,'lines'),
+      width = unit(bed_sub$width,'native'),
+      height = unit(0.75 * track_height,'lines'),
+      just = c("left","center"),
+      gp = gpar(
+        fill = bed_sub$color,
+        col = bed_sub$color
+      ),
+      default.units = 'native'
+    );
+
+    # grid.lines(
+      # x = unit(c(startbp,endbp),'native'),
+      # y = unit(rep(y_mid,2),'lines')
+    # );
+    
+    grid.text(
+      label = sub_name,
+      x = unit(1,'npc') + unit(0.5,'char'),
+      y = unit(y_mid,'lines'),
+      just = c("left","center"),
+      gp = gpar(
+        cex = 1
+      )
+    );
+
+    i = i + 1;
+  }
+
+}
+
 panel.gwas <- function (
   gwas_hits, 
   fill = "navy", 
@@ -1722,13 +1801,28 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
   grid.newpage();
   
+  bed_lines = length(unique(bed_tracks$name));
+  bed_height = 1; # lines
+
+  # Right column width is either fixed (5 lines) or extended based on the names
+  # next to the BED tracks
+  # if (!is.null(bed_tracks)) {
+    # bed_names = unique(bed_tracks$name);
+    # longest_bed_name = bed_names[which.max(nchar(bed_names))];
+    # longest_bed_name_width = convertUnit(unit(1,'strwidth',longest_bed_name),'lines');
+    
+    # right_col_width = max(5,as.numeric(longest_bed_name_width));
+  # } else {
+    # right_col_width = 5;
+  # }
+  
   # push viewports just to calculate optimal number of rows for refFlat
   pushViewport(viewport(
-    layout = grid.layout(2+3+4+1+1+1+1,1+2, 
+    layout = grid.layout(2+3+4+1+1+1+1+1+1,1+2, 
       widths = unit(c(5,1,5),c('lines','null','lines')),
       heights = unit(
-        c(.5,title_lines,nrugs,1,1,0.25,1.8*args[['gwrows']],0.25,2*args[['fmrows']],0.25,2*args[['rfrows']],4,.25),
-        c('lines','lines','lines','lines','null','lines','lines','lines','lines','lines','lines', 'lines','lines')
+        c(.5,title_lines,nrugs,1,1,0.25,bed_height*bed_lines,0.25,1.8*args[['gwrows']],0.25,2*args[['fmrows']],0.25,2*args[['rfrows']],4,.25),
+        c('lines','lines','lines','lines','null','lines','lines','lines','lines','lines','lines','lines','lines', 'lines','lines')
       )
     )
   ));
@@ -1744,7 +1838,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
   pushViewport(viewport(
     xscale=pvalVp$xscale,
-    layout.pos.row=11,
+    layout.pos.row=13,
     layout.pos.col=2,
     name="refFlatOuter"
   ));
@@ -1771,7 +1865,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
   pushViewport(viewport(
     xscale=pvalVp$xscale,
-    layout.pos.row=9,
+    layout.pos.row=11,
     layout.pos.col=2,
     name="finemapOuter"
   ));
@@ -1798,7 +1892,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
 
   pushViewport(viewport(
     xscale=pvalVp$xscale,
-    layout.pos.row=7,
+    layout.pos.row=9,
     layout.pos.col=2,
     name="gwasOuter"
   ));
@@ -1826,22 +1920,37 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   popViewport(4);
 
   # OK.  Now we know how many rows to use and we can set up the layout we will actually use.
-  #message(args[['gwrows']])
 
   pushViewport(viewport(
     layout = grid.layout(
-      2+3+4+1+1+1+1,1+2, 
+      2+3+4+1+1+1+1+1+1,1+2, 
       widths = unit(
         c(args[['axisTextSize']]*args[['leftMarginLines']],1,args[['axisTextSize']]*args[['rightMarginLines']]),
         c('lines','null','lines')
       ),
       heights = unit(
-        c(.5,title_lines,nrugs,1,1,0.25,1.5*args[['geneFontSize']]*args[['gwrows']],0.25,2*args[['geneFontSize']]*args[['fmrows']],0.25,2*args[['geneFontSize']]*args[['rfrows']],4,.25),
-        c('lines','lines','lines','lines','null','lines','lines','lines','lines','lines','lines','lines','lines'))
+        c(
+          .5,
+          title_lines,
+          nrugs,
+          1,
+          1,
+          0.25,
+          bed_height*bed_lines,
+          0.25,
+          1.5*args[['geneFontSize']]*args[['gwrows']],
+          0.25,
+          2*args[['geneFontSize']]*args[['fmrows']],
+          0.25,
+          2*args[['geneFontSize']]*args[['rfrows']],
+          4,
+          .25
+        ),
+        c('lines','lines','lines','lines','null','lines','lines','lines','lines','lines','lines','lines','lines','lines','lines'))
       )
     )
   );
-
+  
   ##
   # layout (top to bottom)
   # ----------------------
@@ -1850,14 +1959,16 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   #    3 rugs
   #    4 separation
   #    5 pvals
-  #    6 separation 
-  #    7 gwas hits
-  #    8 separation
-  #    9 fine mapping regions
+  #    6 separation
+  #    7 bedTracks
+  #    8 separation 
+  #    9 gwas hits
   #    10 separation
-  #    11 genes
-  #    12 subtitle text 
-  #    13 spacer
+  #    11 fine mapping regions
+  #    12 separation
+  #    13 genes
+  #    14 subtitle text 
+  #    15 spacer
   #
   # layout (left to right)
   # ----------------------
@@ -1955,16 +2066,23 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     for (i in groupIds) { 
       idx <- which(metal$group == i);
       gmetal <- metal[idx,];
-      
-      colors <- args[['ldColors']][gmetal$group]; 
-      colors[which(gmetal$pch %in% 21:25)] <- 'gray20';
-      
+
+      color_col = char2Rname(args[['colorCol']]);
+      if (color_col %in% names(gmetal)) {
+        plot_col = gmetal[,color_col];
+        plot_fill = gmetal[,color_col];
+      } else {
+        plot_col <- args[['ldColors']][gmetal$group]; 
+        plot_col[which(gmetal$pch %in% 21:25)] <- 'gray20';
+        plot_fill = args[['ldColors']][gmetal$group];
+      }
+
       grid.points(x=gmetal$pos,y=transformation(gmetal$P.value),
         pch=gmetal$pch,
         gp=gpar(
           cex=dotSizes[idx], 
-          col=colors,
-          fill=args[['ldColors']][gmetal$group]
+          col=plot_col,
+          fill=plot_fill
         )
       ); 
     }
@@ -2205,20 +2323,20 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   upViewport(3);   
 
   ######### subtitle space; place holder for now
-  pushViewport(viewport(layout.pos.row=8,layout.pos.col=2,name="subtitle"));
   if(FALSE) {
+    pushViewport(viewport(layout.pos.row=8,layout.pos.col=2,name="subtitle"));
     grid.rect(gp=gpar(col='red'));
     grid.xaxis(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
     grid.text(paste('Position on',chr2chrom(args[['chr']]),"(Mb)"),
       gp=gpar(col="red"));
-    }
-  upViewport(1);
+    upViewport(1);
+  }
   
   ########## annotation (genes)
   if(args[['rfrows']] > 0) {
     pushViewport(
       viewport(xscale=pvalVp$xscale,
-        layout.pos.row=11,
+        layout.pos.row=13,
         layout.pos.col=2,
         name="refFlatOuter")
     );
@@ -2310,7 +2428,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   if(args[['fmrows']] > 0) {
     pushViewport(viewport(
       xscale=pvalVp$xscale,
-      layout.pos.row=9,
+      layout.pos.row=11,
       layout.pos.col=2,
       name="finemapOuter"
     ));
@@ -2342,7 +2460,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   if(args[['gwrows']] > 0) {
     pushViewport(viewport(
       xscale=pvalVp$xscale,
-      layout.pos.row=7,
+      layout.pos.row=9,
       layout.pos.col=2,
       name="gwasOuter"
     ));
@@ -2367,6 +2485,20 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     
     upViewport(1);
 
+    grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+    
+    upViewport(1);
+  }
+  
+  if (!is.null(bed_tracks)) {
+    pushViewport(viewport(
+      xscale = pvalVp$xscale,
+      layout.pos.row = 7,
+      layout.pos.col = 2,
+      name = "bedTracks"
+    ));
+    
+    panel.bed(bed_tracks,bed_height,args[['startBP']],args[['endBP']]);
     grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
     
     upViewport(1);
@@ -2711,12 +2843,14 @@ default.args <- list(
   showAnnot=TRUE,                       # show annotation for each snp?
   showGenes=TRUE,                       # show genes?
   annotCol='annotation',                # column to use for annotation, if it exists
+  colorCol='color',                     # column to use to override SNP colors, if it exists
   annotPch='24,24,25,22,22,8,7,21,1',        # plot symbols for annotation
   condPch='4,16,17,15,25,8,7,13,12,9,10',    # plot symbols for groups of LD blocks of SNPs
   condRefsnpPch=23,                     # symbol to use for refsnps in conditional plot, NULL means use same symbol as other SNPs in group
   annotOrder=NULL,                      # ordering of annotation classes
   showRefsnpAnnot=TRUE,                 # show annotation for reference snp too?
   bigDiamond=FALSE,                     # put big diamond around refsnp?
+  bedTracks=NULL,
   ld=NULL,                              # file for LD information for reference SNP
   cond_ld=NULL,                         # files for LD information for conditional SNPs
   ldCuts = "0,.2,.4,.6,.8,1",           # cut points for LD coloring
@@ -3148,7 +3282,11 @@ if ( is.null(args[['reload']]) ) {
   if ( is.null(args[['ld']]) && ! args[['pquery']] ) { 
     args[['legend']] = 'none' 
   }
-    
+
+  if (char2Rname(args[['colorCol']]) %in% names(metal)) {
+    args[['legend']] = 'none';
+  }
+
   # Load LD for reference SNP. 
   ld <- GetData( args[['ld']], ld.default, command=command, clobber=!userFile[['ld']] || args[['clobber']] )
   
@@ -3371,17 +3509,66 @@ if ( is.null(args[['reload']]) ) {
   
   # load marker denote, if available
   denote_markers = NULL;
-  if (!is.null(args[['denoteMarkersFile']])) {
-    denote_markers = read.table(args[['denoteMarkersFile']],header=T,sep="\t",comment.char="",stringsAsFactors=F);
-    
-    b_denote = (denote_markers$chr == args[['chr']]) & (denote_markers$pos <= args[['endBP']]) & (denote_markers$pos >= args[['startBP']]);
-    denote_markers = denote_markers[b_denote,];
-    denote_markers$pos = denote_markers$pos / 1E6;
-    
-    if (!"color" %in% names(denote_markers)) {
-      denote_markers$color = "black";
+  try({
+    if (!is.null(args[['denoteMarkersFile']])) {
+      denote_markers_file = args[['denoteMarkersFile']];
+      if (!file.exists(denote_markers_file)) {
+        # try directory above
+        denote_markers_file = file.path("..",denote_markers_file);
+        if (!file.exists(denote_markers_file)) {
+          warning("could not find denote_markers file..");
+        }
+      }
+        
+      denote_markers = read.table(denote_markers_file,header=T,sep="\t",comment.char="",stringsAsFactors=F);
+      
+      b_denote = (denote_markers$chr == args[['chr']]) & (denote_markers$pos <= args[['endBP']]) & (denote_markers$pos >= args[['startBP']]);
+      denote_markers = denote_markers[b_denote,];
+      denote_markers$pos = denote_markers$pos / 1E6;
+      
+      if (!"color" %in% names(denote_markers)) {
+        denote_markers$color = "black";
+      }
     }
-  }
+  },silent=T);
+
+  # load BED file, if available
+  bed_tracks = NULL;
+  try({
+    if (!is.null(args[['bedTracks']])) {
+
+      bed_file = args[['bedTracks']];
+      if (!file.exists(bed_file)) {
+        # try directory above
+        bed_file = file.path("..",bed_file);
+        if (!file.exists(bed_file)) {
+          warning("could not find bedTracks file..");
+          stop();
+        }
+      }
+
+      bed_tracks = read.table(bed_file,header=F,sep="\t",comment.char="",stringsAsFactors=F);
+      header = c("chr","start","end","name","score","strand","thickStart","thickEnd","itemRgb");
+      names(bed_tracks) = header[1:dim(bed_tracks)[2]];
+
+      bed_tracks$start = bed_tracks$start / 1E6;
+      bed_tracks$end = bed_tracks$end / 1E6;
+      
+      # subset to region (look for overlap of regions)
+      sub_chrom = args[['chr']];
+      if (any(grepl('chr',bed_tracks$chr))) {
+        sub_chrom = sprintf("chr%s",sub_chrom);
+      }
+      
+      bed_tracks = subset(bed_tracks,(chr == sub_chrom));
+      bed_tracks = bed_tracks[order(bed_tracks$start),];
+      bed_tracks = subset(bed_tracks,
+        (start <= args[['endBP']] / 1E6) & 
+        (end >= args[['startBP']] / 1E6)
+      );
+      
+    }
+  },silent=T);
 
   # adjust for position units
   metal$pos <- metal$pos / args[['unit']];

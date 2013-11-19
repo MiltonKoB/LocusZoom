@@ -1051,6 +1051,7 @@ def getSettings():
   parser.add_option("--add-refsnps",dest="condsnps",help="Plot LD with additional SNPs.");
   parser.add_option("--conditional",dest="cond_compat",help=SUPPRESS_HELP); # backward compat, same as above option
   parser.add_option("--denote-markers-file",dest="denote_markers_file",help="Designate additional markers to highlight on the plot with a file.");
+  parser.add_option("--bed-tracks",dest="bed_tracks",help="Give a BED file to display tracks (one track per label in name column.) Uses first 4 columns of BED, ignoring the rest.");
   parser.add_option("--refgene",dest="refgene",help="Create region plot flanking a gene.");
   parser.add_option("--flank",dest="flank",help="Distance around refsnp to plot.");
   parser.add_option("--chr",dest="chr",help="Chromosome that refsnp is located on - this is only used for sanity checking, but it is good to include.");
@@ -1313,6 +1314,14 @@ def getSettings():
       die("Error: could not find file specified by --denote-markers-file: %s" % opts.denote_markers_file);
     else:
       opts.denote_markers_file = denote_file;
+  
+  # Check BED tracks. 
+  if opts.bed_tracks:
+    bed_tracks = find_systematic(opts.bed_tracks);
+    if bed_tracks == None:
+      die("Error: could not find file specified by --bed-tracks: %s" % opts.bed_tracks);
+    else:
+      opts.bed_tracks = bed_tracks;
 
   # Compute start/end positions for each SNP, unless already specified and in refsnp mode.
   opts.snplist = [];
@@ -1796,6 +1805,10 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   if opts.denote_markers_file:
     denote_file = parse_denote_marker_file(opts.denote_markers_file,opts.sqlite_db_file);
     args += " denoteMarkersFile=%s" % denote_file;
+  
+  # BED tracks file. 
+  if opts.bed_tracks != None:
+    args += " bedTracks=%s" % opts.bed_tracks;
 
   print "Creating plot..";
 

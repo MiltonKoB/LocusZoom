@@ -368,7 +368,7 @@ def main():
     args=[],
     run_dir="tests/results",
     log_file="log_file.txt",
-    multi=5
+    multi=8
    );
 
   print "Adding test cases to testing suites..";

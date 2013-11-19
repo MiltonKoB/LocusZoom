@@ -622,3 +622,16 @@ tests.append(Test(
 title="Using LD cache from previous run",
 delay=60)
 );
+
+# Tests for plotting BED tracks
+tests.append(Test(
+"--prefix bed_test1 --metal tests/data/DIAGRAMv2_EU_112808_n17K_results_formetal_prettycolors.txt --refsnp rs7903146 --flank 250kb --build hg19 --source 1000G_March2012 --pop EUR refsnpLineColor='black' rightMarginLines=10 --bed-tracks tests/data/HuPanIs_12_dense_statenames.bed",
+title = "BED track test"
+));
+
+# Test for changing SNP colors from within metal file
+tests.append(Test(
+"--prefix color_test --metal tests/data/DIAGRAMv2_EU_112808_n17K_results_formetal_prettycolors.txt --refsnp rs7903146 --flank 250kb --build hg19 --source 1000G_March2012 --pop EUR refsnpLineColor='black' rightMarginLines=10 --bed-tracks tests/data/HuPanIs_12_dense_statenames.bed colorCol=pretty",
+title = "Testing changing colors of SNPs (colorCol set in file)"
+));
+
