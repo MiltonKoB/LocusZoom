@@ -1129,7 +1129,7 @@ def getSettings():
   parser.add_option("--plotonly",dest="plotonly",help="Generate only the plot figure, delete all other temporary files and do not create a directory.",action="store_true");
   parser.add_option("-p","--prefix",dest="prefix",type="str",help="Prefix to add to zoomplot pdfs or directories.");
   parser.add_option("--no-date",dest="no_date",action="store_true",default=False,help="Remove date from directory and filenames.");
-  parser.add_option("--rundir",dest="rundir",help="Directory where m2zfast will attempt to run.");
+  parser.add_option("--rundir",dest="rundir",help="Directory where locuszoom will attempt to run.");
   parser.add_option("-e","--experimental",dest="exper",action="store_true",help=SUPPRESS_HELP);
   parser.add_option("--override-m2z",dest="m2zpath",help=SUPPRESS_HELP);
   parser.add_option("--db",type="string",help="SQLite database file. This overrides the conf file.");
