@@ -34,6 +34,7 @@ import tempfile
 import platform
 import math
 import shlex
+import json
 from m2zutils import *
 from FugueFinder import *
 from PlinkFinder import *
@@ -1296,11 +1297,23 @@ def getSettings():
   elif opts.ld_vcf != None:
     opts.ld_vcf = find_systematic(opts.ld_vcf);
     if opts.ld_vcf == None or not os.path.isfile(opts.ld_vcf):
-      die("Error: user-specified VCF file does not exist.\nFile was: %s " % opts.ld_vcf)
-    
-    ld_vcf_tabix = opts.ld_vcf + ".tbi";
-    if not os.path.isfile(ld_vcf_tabix):
-      die("Error: expected a tabix index for VCF file but could not find it: %s" % ld_vcf_tabix);
+      die("Error: user-specified VCF (or JSON) file does not exist.\nFile was: %s " % opts.ld_vcf)
+
+    if '.json' in opts.ld_vcf:
+      import json
+      with open(opts.ld_vcf) as jsin:
+        ld_vcf_dict = json.load(jsin);
+
+      for chrom, vcf_file in ld_vcf_dict.iteritems():
+        vcf_file_tabix = vcf_file + ".tbi";
+        if not os.path.isfile(vcf_file_tabix):
+          die("Error: expected tabix index for VCF file, but could not find one: %s" % vcf_file_tabix);
+
+      opts.ld_vcf_dict = ld_vcf_dict;
+    else:
+      ld_vcf_tabix = opts.ld_vcf + ".tbi";
+      if not os.path.isfile(ld_vcf_tabix):
+        die("Error: expected a tabix index for VCF file but could not find it: %s" % ld_vcf_tabix);
 
   else:
     if not opts.no_ld:
@@ -1784,16 +1797,24 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
       print "Using user-specified VCF file to calculate LD with reference SNP %s.." % str(refsnp);
       
       ld_files = [];
-      
+     
+      if '.json' in opts.ld_vcf:
+        ld_vcf = opts.ld_vcf_dict.get(str(chr));
+
+        if ld_vcf is None:
+          die("Error: no VCF file available for chromosome %s in JSON file: %s" % opts.ld_vcf);
+      else:
+        ld_vcf = opts.ld_vcf;
+
       tabix_region = "{0}:{1}-{2}".format(chr,start,end);
-      ld_temp = ld_from_vcf(opts.ld_measure,refsnp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
+      ld_temp = ld_from_vcf(opts.ld_measure,refsnp.pos,ld_vcf,tabix_region,conf.TABIX_PATH);
       if ld_temp != None:
         ld_files.append(ld_temp);
 
       if opts.condsnps:
         for cond_snp in opts.condsnps:
           print "Using user-specified VCF file to calculate LD with conditional SNP %s.." % str(cond_snp);
-          ld_temp = ld_from_vcf(opts.ld_measure,cond_snp.pos,opts.ld_vcf,tabix_region,conf.TABIX_PATH);
+          ld_temp = ld_from_vcf(opts.ld_measure,cond_snp.pos,ld_vcf,tabix_region,conf.TABIX_PATH);
           if ld_temp != None:
             ld_files.append(ld_temp);
     else:
