@@ -128,7 +128,8 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
     time.strftime("%y%m%d",time.localtime()),
     time.strftime("%H%M%S",time.localtime())
   );
-  
+
+  seen = {};
   markers = 0;
   with open(ld_filename,'w') as out:
     print >> out, "\t".join(['snp1','snp2','dprime','rsquare']);
@@ -142,13 +143,14 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
       rec = rec.split("\t");
       rec[-1] = rec[-1].rstrip();
 
-      # Is this a SNP? 
-      (rec_ref,rec_alt) = rec[3:5];
-     
-      if len(rec_ref) != 1:
-        continue;
-      elif len(rec_alt) != 1:
-        continue;
+#     Commented out for plotting indels that are biallelic
+#      # Is this a SNP? 
+#      (rec_ref,rec_alt) = rec[3:5];
+
+#      if len(rec_ref) != 1:
+#        continue;
+#      elif len(rec_alt) != 1:
+#        continue;
 
       # Did it pass filters? 
       rec_pass = rec[6];
@@ -160,9 +162,15 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
       if 'chr' not in chr:
         chr = 'chr' + chr;
       chrpos = "{0}:{1}".format(chr,pos);
-      
+
       if pos == index_pos:
         continue;
+
+      # Have we seen this variant already? 
+      if seen.get((chr,pos)) is not None:
+        print >> sys.stderr, "Warning: multiple variants at same position (%s) in VCF file, using the last variant" % chrpos;
+      else:
+        seen[(chr,pos)] = 1;
 
       # Genotypes, converted to 0/1/2 coding
       try:
@@ -257,7 +265,8 @@ def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
     time.strftime("%y%m%d",time.localtime()),
     time.strftime("%H%M%S",time.localtime())
   );
-  
+
+  seen = {};
   markers = 0;
   with open(ld_filename,'w') as out:
     print >> out, "\t".join(['snp1','snp2','dprime','rsquare']);
@@ -271,13 +280,14 @@ def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
       rec = rec.split("\t");
       rec[-1] = rec[-1].rstrip();
 
-      # Is this a SNP? 
-      (rec_ref,rec_alt) = rec[3:5];
-     
-      if len(rec_ref) != 1:
-        continue;
-      elif len(rec_alt) != 1:
-        continue;
+#     Commented out for LD with biallelic indels
+#      # Is this a SNP? 
+#      (rec_ref,rec_alt) = rec[3:5];
+
+#      if len(rec_ref) != 1:
+#        continue;
+#      elif len(rec_alt) != 1:
+#        continue;
 
       # Did it pass filters? 
       rec_pass = rec[6];
@@ -289,9 +299,15 @@ def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
       if 'chr' not in chr:
         chr = 'chr' + chr;
       chrpos = "{0}:{1}".format(chr,pos);
-      
+
       if pos == index_pos:
         continue;
+
+      # Have we seen this variant already? 
+      if seen.get((chr,pos)) is not None:
+        print >> sys.stderr, "Warning: multiple variants at same position (%s) in VCF file, using the last variant" % chrpos;
+      else:
+        seen[(chr,pos)] = 1;
 
       # Phased genotypes inserted into array in order 
       try:
