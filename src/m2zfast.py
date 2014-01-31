@@ -609,7 +609,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
 
 # Given an EPACTS file, this function extracts the region from the file between
 # chr/start/end.
-def readEPACTS(epacts_file,chr,start,end,no_transform):
+def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_transform):
   region = "chr%s:%s-%s" % (str(chr),start,end);
   output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
 
@@ -637,17 +637,17 @@ def readEPACTS(epacts_file,chr,start,end,no_transform):
 
   # Find chr/begin/end columns. 
   try:
-    chr_col = epacts_header.index("#CHROM");
-    begin_col = epacts_header.index("BEGIN");
-    end_col = epacts_header.index("END");
+   chr_col = epacts_header.index(chr_col);
+   begin_col = epacts_header.index(beg_col);
+   end_col = epacts_header.index(end_col);
   except:
-    die("Error: could not find required columns in your EPACTS file: CHROM, BEGIN, END");
+   raise IOError, "Error: could not find chrom/begin/end columns in EPACTS file. Try specifying --epacts-chrom-col, --epacts-beg-col, --epacts-end-col.";
 
   # Find p-value column.
   try:
-    pval_col = epacts_header.index("PVALUE");
+   pval_col = epacts_header.index(pval_col);
   except:
-    die("Error: could not find p-value column in EPACTS file: PVALUE");
+   raise IOError, "Error: could not find p-value column in EPACTS file. Try specifying with --epacts-pval-col.";
   
   out = open(output_file,"w");
   print >> out, "\t".join(['chr','pos','MarkerName','P-value']);
@@ -1087,6 +1087,10 @@ def getSettings():
   parser.add_option("--delim",dest="delim",help="Delimiter for metal file.");
   parser.add_option("--pvalcol",dest="pvalcol",help="Name of p-value column or 0-based integer specifying column number.");
   parser.add_option("--markercol",dest="snpcol",help="Name of SNP column or 0-based integer specifying column number.");
+  parser.add_option("--epacts-chr-col",dest="epacts_chr_col",help="Name of chrom column for EPACTS file. Defaults to #CHROM.");
+  parser.add_option("--epacts-beg-col",dest="epacts_beg_col",help="Name of begin column for EPACTS file. Defaults to BEGIN.");
+  parser.add_option("--epacts-end-col",dest="epacts_end_col",help="Name of end column for EPACTS file. Defaults to END.");
+  parser.add_option("--epacts-pval-col",dest="epacts_pval_col",help="Name of pvalue column for EPACTS file. Defaults to PVALUE.");
   parser.add_option("--cache",dest="cache",help="Change the location of the cache file to use for LD. Set to 'None' to disable.");
   parser.add_option("--hitspec",dest="hitspec",help="File containing a list of SNPs, chromosome, start, and stop.");
   parser.add_option("--refsnp",dest="refsnp",help="Create region plot around this reference SNP.");
@@ -1140,6 +1144,10 @@ def getSettings():
   parser.set_defaults(
     multi = 1,
     delim = "\t",
+    epacts_chrom_col = "#CHROM",
+    epacts_beg_col = "BEGIN",
+    epacts_end_col = "END",
+    epacts_pval_col = "PVALUE",
     no_clean = False,
     no_ld = False,
     no_transform = False,
@@ -1744,7 +1752,7 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   if input_type == 'metal':
     (bPocull,metal_temp,min_snp) = readMETAL(input_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
   elif input_type == 'epacts':
-    (bPocull,metal_temp,min_snp) = readEPACTS(input_file,chr,start,end,opts.no_trans);
+    (bPocull,metal_temp,min_snp) = readEPACTS(input_file,chr,start,end,opts.epacts_chrom_col,opts.epacts_beg_col,opts.epacts_end_col,opts.epacts_pval_col,opts.no_trans);
 
   ld_temp = None;
   
@@ -1928,6 +1936,9 @@ def main():
   args += " alreadyTransformed=TRUE";
 
   # Change into runtime directory.
+  if _DEBUG:
+    print "DEBUG: runtime directory: %s" % opts.rundir;
+
   os.chdir(opts.rundir);
 
   # Single process mode - one plot generated at a time. 
@@ -1962,6 +1973,9 @@ def main():
       if not opts.no_date:
         temp_dir += time.strftime("%y%m%d") + "_";
       temp_dir += str(entry[0]);
+
+      if _DEBUG:
+        print "DEBUG: plot directory: %s" % temp_dir;
 
       # Setup the temporary directory.
       # If it exists already, it was used on a previous plotting run, and should

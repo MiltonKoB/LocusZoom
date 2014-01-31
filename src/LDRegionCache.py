@@ -33,9 +33,9 @@ class LDRegionCache():
     # Load database.
     existed = False;
     if not os.path.isfile(dbfile):
-      print >> sys.stderr, "Warning: could not locate LD cache database, tried: %s, creating new one.." % dbfile;
+      print "Warning: could not locate LD cache database, tried: %s, creating new one.." % dbfile;
     else:
-      print >> sys.stderr, "Accessing LD cache: %s" % dbfile;
+      print "Accessing LD cache: %s" % dbfile;
       existed = True;
     
     try:
