@@ -105,13 +105,13 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
 
   (index_ref,index_alt) = index_rec[3:5];
 
-  if len(index_ref) != 1:
-    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %" % (index_ref,index_alt);
-    return;
-
-  if len(index_alt) != 1:
-    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %" % (index_ref,index_alt);
-    return;
+#  if len(index_ref) != 1:
+#    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %s" % (index_ref,index_alt);
+#    return;
+#
+#  if len(index_alt) != 1:
+#    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %s" % (index_ref,index_alt);
+#    return;
 
   # Now grab the other SNPs, and calculate r2 with each of them. 
   p = subprocess.Popen([tabix_path,vcf_file,region],stdout=subprocess.PIPE,stderr=subprocess.PIPE);

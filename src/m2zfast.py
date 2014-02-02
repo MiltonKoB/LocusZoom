@@ -678,9 +678,9 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
       print >> sys.stderr, "Warning: skipping marker %s - could not convert chr/begin/end to integers.." % marker_name;
       continue;
 
-    if file_begin != file_end:
-      skipped_markers.append("chr%s:%s-%s" % (file_chrom,file_begin,file_end));
-      continue;
+#    if file_begin != file_end:
+#      skipped_markers.append("chr%s:%s-%s" % (file_chrom,file_begin,file_end));
+#      continue;
 
     if file_chrom == chr and file_begin >= start and file_end <= end:
       # Did we find a SNP in this region at all? 
