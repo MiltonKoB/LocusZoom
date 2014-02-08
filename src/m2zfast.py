@@ -989,6 +989,9 @@ def printOpts(opts):
     table.add_row(['start',opts.start]);
     table.add_row(['end',opts.end]);
 
+  if opts.gwas_cat:
+    table.add_row(['gwas-cat',opts.gwas_cat]);
+
   display_opts = ('flank','build','ld','ld_measure','pop','source','snpset','db','cache',
     'no_clean','no_transform','verbose','m2zpath','plotonly'
   );
@@ -1341,10 +1344,13 @@ def getSettings():
   # Check GWAS catalog setting.
   if opts.gwas_cat != None:
     gwas_cat_file = getGWASCat(opts.build,opts.gwas_cat,conf.GWAS_CATS);
-    if gwas_cat_file == None:
-      print >> sys.stderr, "Error: no gwas catalog '%s' for build '%s', possible options are:" % (opts.gwas_cat,opts.build);
-      printGWACatalogs(conf.GWAS_CATS,opts.build);
-      sys.exit(1);
+    if gwas_cat_file is None:
+      opts.gwas_cat_file = find_systematic(opts.gwas_cat);
+      if opts.gwas_cat_file is None:
+        print >> sys.stderr, "Error: no gwas catalog '%s' exists for selected build, and was not a file either!" % opts.gwas_cat;
+        print >> sys.stderr, "If you were trying to specify a catalog by code, they are: "
+        printGWACatalogs(conf.GWAS_CATS,opts.build);
+        sys.exit(1);
     else:
       opts.gwas_cat_file = find_systematic(gwas_cat_file);
   else:
