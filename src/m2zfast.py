@@ -641,7 +641,7 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
    begin_col = epacts_header.index(beg_col);
    end_col = epacts_header.index(end_col);
   except:
-   raise IOError, "Error: could not find chrom/begin/end columns in EPACTS file. Try specifying --epacts-chrom-col, --epacts-beg-col, --epacts-end-col.";
+   raise IOError, "Error: could not find chrom/begin/end columns in EPACTS file. Try specifying --epacts-chr-col, --epacts-beg-col, --epacts-end-col.";
 
   # Find p-value column.
   try:
