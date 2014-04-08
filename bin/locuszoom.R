@@ -2577,14 +2577,14 @@ grid.log <- function(args,metal,linespacing=1.5,ascii=FALSE,debug=FALSE){
   labels=c(labels,"number of SNPs plotted");
   values=c(values,as.character(dim(metal)[1]));
 
-  labels=c(labels,paste("max",args[['pvalCol']]));
+  labels=c(labels,paste("min",args[['pvalCol']]));
   maxIdx <- which.max(transformation(metal$P.value));
   maxName <- as.character(metal$MarkerName[maxIdx]);
   maxNegLogP <- transformation(metal$P.value[maxIdx]);
   maxPSci <- log2sci(-maxNegLogP)
   values=c(values,paste(maxPSci," [", maxName ,"]",sep=""));
 
-  labels=c(labels,paste("min",args[['pvalCol']]));
+  labels=c(labels,paste("max",args[['pvalCol']]));
   minIdx <- which.min(transformation(metal$P.value));
   minName <- as.character(metal$MarkerName[minIdx]);
   minNegLogP <- transformation(metal$P.value[minIdx]);
