@@ -2866,7 +2866,7 @@ default.args <- list(
   rfrows = '10',                        # max number of rows for reflat genes
   fmrows = 3,                           # max number of rows for fine mapping regions
   gwrows = 3,                           # max number of rows for gwas hits
-  warnMissingGenes = FALSE,             # should we warn about missing genese on the plot?
+  warnMissingGenes = TRUE,             # should we warn about missing genese on the plot?
   warnMissingFineMap = TRUE,            # should we warn about missing fine mapping regions on the plot? 
   warnMissingGWAS = TRUE,               # should we wearn about missing gwas hits on the plots? 
   showPartialGenes = TRUE,              # should genes that don't fit completely be displayed?
