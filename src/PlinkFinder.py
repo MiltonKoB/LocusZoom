@@ -108,7 +108,7 @@ class PlinkFinder():
     self._check_geno_paths();
     ld_file = self._run_plink();
 
-    if ld_file == None:
+    if ld_file is None:
       return;
 
     # Load LD.

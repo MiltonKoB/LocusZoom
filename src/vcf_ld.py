@@ -9,7 +9,7 @@ def rsquared(x, y):
   # Drop observations that are None or NaN. 
   good_is = [];
   for i in xrange(len(x)):
-    if (x[i] != None) and (y[i] != None):
+    if (x[i] is not None) and (y[i] is not None):
       good_is.append(i);
 
   x = [x[i] for i in good_is];
@@ -168,7 +168,8 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
 
       # Have we seen this variant already? 
       if seen.get((chr,pos)) is not None:
-        print >> sys.stderr, "Warning: multiple variants at same position (%s) in VCF file, using the last variant" % chrpos;
+        print >> sys.stderr, "Warning: multiple variants at same position (%s) in VCF file, using the first variant" % chrpos;
+        continue;
       else:
         seen[(chr,pos)] = 1;
 
@@ -243,11 +244,11 @@ def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
   (index_ref,index_alt) = index_rec[3:5];
 
   if len(index_ref) != 1:
-    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %" % (index_ref,index_alt);
+    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %s" % (index_ref,index_alt);
     return;
 
   if len(index_alt) != 1:
-    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %" % (index_ref,index_alt);
+    print >> sys.stderr, "Error: while calculating LD from VCF file: index SNP is not a SNP - ref allele was %s, alt allele was %s" % (index_ref,index_alt);
     return;
 
   # Now grab the other SNPs, and calculate r2 with each of them. 
@@ -317,7 +318,7 @@ def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
         continue;
 
       # Number of non-missing alleles
-      nonmiss_gts = sum(map(lambda x: x != None,gts));
+      nonmiss_gts = sum(map(lambda x: x is not None,gts));
 
       # Calculate statistics from haplos
       counts = defaultdict(int);
