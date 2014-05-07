@@ -490,7 +490,7 @@ AdjustModesOfArgs <- function(args) {
           'frameAlpha','hiAlpha','rugAlpha',
           'refsnpLineAlpha', 'recombFillAlpha','recombLineAlpha', 'refsnpTextAlpha', 'refsnpLineWidth',
           'ymin','ymax','legendSize','refsnpTextSize','axisSize','axisTextSize','geneFontSize','smallDot',
-          'largeDot','refDot','signifLine','ldThresh','rightMarginLines'),
+          'largeDot','refDot','ldThresh','rightMarginLines'),
         as.numeric);
 
     args <- sublapply(args,
@@ -512,11 +512,11 @@ AdjustModesOfArgs <- function(args) {
         as.logical);
 
     args <- sublapply( args,
-        c('ldCuts','xat','yat','annotPch','condPch'),
+        c('ldCuts','xat','yat','annotPch','condPch','signifLine','signifLineWidth'),
         function(x) { as.numeric(unlist(strsplit(x,","))) } );
     
     args <- sublapply( args,
-        c('condLdColors'),
+        c('condLdColors','signifLineColor'),
         function(x) { as.character(unlist(strsplit(x,","))) } );
 
     if (!is.null(args[['weightRange']])) {
@@ -526,7 +526,7 @@ AdjustModesOfArgs <- function(args) {
     }
 
     args <- sublapply( args,
-        c('rfrows'),
+        c('rfrows','signifLineType'),
         function(x) { as.integer(unlist(strsplit(x,","))) } );
 
     args <- sublapply( args,
@@ -2174,15 +2174,29 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     
   # Draw a dashed line at y = <significance level> if requested. 
   if (!is.null(args[['signifLine']])) {
-    message("signif line at: ",args[['signifLine']]);
-    
-    signifLineY = transformation(args[['signifLine']]);
-    message("trans signif line at: ",signifLineY);
-    grid.lines(
-      x = unit(c(0,1),"npc"),
-      y = unit(c(signifLineY,signifLineY),"native"),
-      gp = gpar(lwd=2,lty=2)
-    );
+    for (i in 1:length(args[['signifLine']])) {   
+      untrans_y = args[['signifLine']][i];
+      signif_line_y = transformation(untrans_y);
+
+      signif_line_col = "black";
+      signif_line_lty = 2;
+      signif_line_lwd = 2;
+      
+      try({ signif_line_col = args[['signifLineColor']][i] },silent=T);
+      try({ signif_line_lty = args[['signifLineType']][i] },silent=T);
+      try({ signif_line_lwd = args[['signifLineWidth']][i] },silent=T);
+      
+      message("trans signif line at: ",signif_line_y);
+      grid.lines(
+        x = unit(c(0,1),"npc"),
+        y = unit(c(signif_line_y,signif_line_y),"native"),
+        gp = gpar(
+          lwd=signif_line_lwd,
+          lty=signif_line_lty,
+          col=signif_line_col
+        )
+      );
+    }
   }
 
   if (FALSE) {
@@ -2825,7 +2839,10 @@ default.args <- list(
   refsnpLineAlpha = 1,                 # alpha for ref snp line
   refsnpLineWidth = 1,                  # width of ref snp line
   refsnpLineType = 2,                   # type of ref snp line (2 = dashed, 1 = solid, etc.. R defaults)
-  signifLine = NULL,                    # draw a horizontal line at significance threshold (specify in p-value scale)
+  signifLine = NULL,                    # draw a horizontal line at significance threshold (specify in p-value scale), can provide vector of values too for multiple lines
+  signifLineType = NULL,                # specify line types, can be a vector 1 per signif line
+  signifLineColor = NULL,               # specify line colors, can be a vector 1 per signif line
+  signifLineWidth = NULL,               # specify line widths, can be a vector 1 per signif line
   cond_snps = NULL,                     # list of SNPs that remain significant after conditional analysis
   cond_pos = NULL,                      # list of conditional SNPs in chr:pos form
   title = "",                           # title for plot
