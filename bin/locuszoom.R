@@ -571,25 +571,17 @@ pos2bp <- function(pos) {
 # read file, using filename to determine method.
 #
 
-read.file <- function(file,header=T,na.strings=c('NA','','.','na'),...) {
+read.file <- function(file,header=T,na.strings=c('NA','','.','na'),pvalCol="P.value",...) {
   if (! file.exists(file) ) { 
     return(NULL);
     message(paste("Missing file: ", file));
   }
 
-  # if file ends .csv, then read.csv
-  if ( regexpr("\\.csv",file) > 0 ) {
-    return(read.csv(file,header=header,na.strings=na.strings,...));
-  }
-
-  # if file ends .Rdata, then load
-  if ( regexpr("\\.Rdata",file) > 0 ) {
-    varName <- load(file);
-    return(varName);
-  }
-
-  # default is read.table
-  return(read.table(file,header=header,na.strings=na.strings,...));
+  # Patch for R 3.1.0 changing default behavior of read.table, now it reads numeric columns
+  # with high precision into factors or character vectors...
+  col_classes = list();
+  col_classes[[pvalCol]] = "numeric";
+  df = read.table(file,header=header,na.strings=na.strings,colClasses=col_classes,...);
 }
 
 #############################################################
@@ -2983,7 +2975,7 @@ if ( args[['dryRun']] )  {
 
 if ( is.null(args[['reload']]) ) {
     if ( file.exists( args[['metal']]) ) {
-      metal <- read.file(args[['metal']],sep="\t");
+      metal <- read.file(args[['metal']],sep="\t",pvalCol=char2Rname(args[['pvalCol']]));
     } else {
       stop(paste('No such file: ', args[['metal']]));
     }
