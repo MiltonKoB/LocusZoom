@@ -2975,7 +2975,11 @@ if ( args[['dryRun']] )  {
 
 if ( is.null(args[['reload']]) ) {
     if ( file.exists( args[['metal']]) ) {
-      metal <- read.file(args[['metal']],sep="\t",pvalCol=char2Rname(args[['pvalCol']]));
+      col_classes = list();
+      pval_col = char2Rname(args[['pvalCol']]);
+      col_classes[[pval_col]] = "numeric";
+      
+      metal <- read.file(args[['metal']],sep="\t",colClasses=col_classes);
     } else {
       stop(paste('No such file: ', args[['metal']]));
     }
@@ -3178,11 +3182,15 @@ if ( is.null(args[['reload']]) ) {
       " End=",args[["end"]],
       sep="");
   if ( is.null(args[['recomb']]) && ! args[['pquery']] ) { args[['showRecomb']] <- FALSE }
-  tryCatch(
-    recrate <- GetData( args[['recomb']], default=recrate.default, 
-      command=command, clobber=!userFile[['recomb']] || args[['clobber']] ),
-    error = function(e) { warning(e) }
-    )
+  tryCatch({
+    col_classes = list(
+      "recomb" = "numeric",
+      "cm_pos" = "numeric"
+    );
+    recrate <- GetData( args[['recomb']], default=recrate.default, command=command, clobber=!userFile[['recomb']] || args[['clobber']], colClasses=col_classes)
+  }, error = function(e) { warning(e) }
+  )
+
   if ( prod(dim(recrate)) == 0 ) { args[['showRecomb']] <- FALSE }
   cat("\n\n");
  
@@ -3297,11 +3305,15 @@ if ( is.null(args[['reload']]) ) {
   }
 
   # Load LD for reference SNP. 
-  ld <- GetData( args[['ld']], ld.default, command=command, clobber=!userFile[['ld']] || args[['clobber']] )
+  ld_col_classes = list(
+    "dprime" = "numeric",
+    "rsquare" = "numeric"
+  );
+  ld <- GetData( args[['ld']], ld.default, command=command, clobber=!userFile[['ld']] || args[['clobber']], colClasses=ld_col_classes )
   
   cond_ld = NULL;
   for (ld_file in args[['cond_ld']]) {
-    cond_ld = rbind(cond_ld,read.table(ld_file,header=T,sep="",comment.char="",stringsAsFactors=F));
+    cond_ld = rbind(cond_ld,read.table(ld_file,header=T,sep="",comment.char="",stringsAsFactors=F,colClasses=ld_col_classes));
   }
   
   cat("\n\n");
