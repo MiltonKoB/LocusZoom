@@ -571,17 +571,14 @@ pos2bp <- function(pos) {
 # read file, using filename to determine method.
 #
 
-read.file <- function(file,header=T,na.strings=c('NA','','.','na'),pvalCol="P.value",...) {
+read.file <- function(file,header=T,na.strings=c('NA','','.','na'),...) {
   if (! file.exists(file) ) { 
     return(NULL);
     message(paste("Missing file: ", file));
   }
 
-  # Patch for R 3.1.0 changing default behavior of read.table, now it reads numeric columns
-  # with high precision into factors or character vectors...
-  col_classes = list();
-  col_classes[[pvalCol]] = "numeric";
-  df = read.table(file,header=header,na.strings=na.strings,colClasses=col_classes,...);
+  df = read.table(file,header=header,na.strings=na.strings,...);
+  return(df);
 }
 
 #############################################################
