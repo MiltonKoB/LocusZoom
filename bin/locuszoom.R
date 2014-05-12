@@ -1156,6 +1156,11 @@ panel.flatbed <- function (
   rowUse <- rep(-Inf,1+maxIdnum)
   id2row <- rep(0,1+maxIdnum)      # keep track of locations for each gene
   
+  # if we're showing isoforms, change the names
+  if (args[['showIso']]) {
+    df0uniq$name = sprintf("%s (%s)",df0uniq$name,df0uniq$nmName)
+  }
+
   # conversion to 'native' isn't working, so we convert evertyhing via inches to npc below. 
   # conversion utility
 
@@ -1219,18 +1224,27 @@ panel.flatbed <- function (
   rows <- min(requestedRows,optRows);
 
   if (is.character(args[['requiredGene']]) ) {
-    requiredGeneIdx <- min(which(df0uniq$name==args[['requiredGene']]) )
-    requiredGeneIdnum <- df0uniq$idnum[requiredGeneIdx]
-    if (id2row[requiredGeneIdnum] > rows) {
-      for (id in which(id2row == 1)){
-        if (df0uniq$left[id] < df0uniq$right[requiredGeneIdx] &&
-            df0uniq$right[id] > df0uniq$left[requiredGeneIdx] ) {
-          id2row[id] = rows+2
+    requiredGeneMatch = df0uniq$name == args[['requiredGene']];
+    # Protection from case where requiredGene isn't in the list of genes to plot in the region. 
+    # Sometimes happens too if someone requests to show isoforms (the gene names won't match since 
+    # the name is now a combination of both gene + isoform ID.)
+    if (any(requiredGeneMatch)) {
+      requiredGeneIdx <- min(which(requiredGeneMatch) )
+      requiredGeneIdnum <- df0uniq$idnum[requiredGeneIdx]
+          
+      if (id2row[requiredGeneIdnum] > rows) {
+        for (id in which(id2row == 1)){
+          if (df0uniq$left[id] < df0uniq$right[requiredGeneIdx] &&
+              df0uniq$right[id] > df0uniq$left[requiredGeneIdx] ) {
+            # If the required gene overlaps with a gene in the first row, push the overlapping
+            # gene out (rows + 2, where rows is the max # of rows). 
+            id2row[id] = rows+2
+          }
         }
+        # Now set the required gene to the first row. 
+        id2row[requiredGeneIdnum] <- 1
       }
-      id2row[requiredGeneIdnum] <- 1
     }
-    
   }
 
   if (optRows > requestedRows && as.logical(args[['warnMissingGenes']])) {
