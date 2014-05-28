@@ -2011,7 +2011,29 @@ def main():
         die("Error: did not get either --metal or --epacts.");
 
       # Create the plot. This runs through the whole sequence of fetching LD and running M2Z.
-      runAll(input_file,input_type,entry[0],entry[1],entry[2],entry[3],opts,iter_args);
+      try:
+        runAll(input_file,input_type,entry[0],entry[1],entry[2],entry[3],opts,iter_args);
+      except sqlite3.OperationalError:
+        print >> sys.stderr, "";
+
+        print >> sys.stderr, fill("Error: A sqlite3 disk error was caught - this is *usually* the "
+                              "result of /tmp or /var/tmp being filled to capacity on the "
+                              "machine, or a permissions error on the database file itself. ",80)
+        
+        print >> sys.stderr, "";
+
+        print >> sys.stderr, fill("You should check that /tmp or /var/tmp are not filled to "
+                              "capacity, and additionally check that all users can read the "
+                              "database. If /tmp or /var/tmp are full, you should email the "
+                              "sysadmin, and then set TMPDIR to a suitable location that is "
+                              "not full. ",80)
+
+        print >> sys.stderr, "";
+
+        print >> sys.stderr, "For reference, your database file is currently located here: %s\n" % opts.sqlite_db_file;
+
+        print >> sys.stderr, "The original error was:";
+        raise;
 
       # Change back up to the parent directory where we started running from. 
       os.chdir("..");
