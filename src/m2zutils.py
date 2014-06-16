@@ -132,12 +132,13 @@ def interval_contained(i1,i2):
     return False;
 
 def chrom2chr(c):
-  c = str(c);
-  if c in ('X','chrX','chromX'):
+  c = str(c).replace("chrom","").replace("chr","").upper();
+
+  if c == 'X':
     return 23;
-  elif c in ('Y','chrY','chromY'):
+  elif c == "Y":
     return 24;
-  elif c == 'mito':
+  elif c in ('MT','MITO'):
     return 25;
   elif c == 'XY':
     return 26;
@@ -145,7 +146,7 @@ def chrom2chr(c):
     try:
       c = int(c);
     except:
-      c = None;
+      raise Exception, "Bad chromosome: %s" % c;
 
     return c;
 

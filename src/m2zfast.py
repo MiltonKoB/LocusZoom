@@ -283,7 +283,7 @@ def parse1000G(snp):
 
   c = snp.split(":");
   if len(c) == 2:
-    chr = chrom2chr(c[0][3:]);
+    chr = chrom2chr(c[0]);
     try:
       pos = long(c[1]);
     except:
