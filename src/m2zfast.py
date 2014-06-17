@@ -1110,6 +1110,7 @@ def getSettings():
   parser.add_option("--ld-vcf",dest="ld_vcf",help="Specify a VCF file from which to compute LD.");
   parser.add_option("--ld-measure",dest="ld_measure",help="Specify LD measure to use. Can be either 'rsquare' or 'dprime'. Default is rsquare.");
   parser.add_option("--no-ld",dest="no_ld",help="Disable calculating and displaying LD information.",action="store_true");
+  parser.add_option("--enable-db-annot",action="store_true",default=False,help="Enable pulling variant annotation from SQLite. This is for backwards compatibility only in 1.3, will be completely disabled in 1.4.");
 
   gwas_help = "Select GWAS catalog to use for plotting GWAS hits track. Available catalogs are: {spacer}{tables}".format(
     spacer = "".join([os.linesep]*2),
@@ -1724,7 +1725,7 @@ def listTables(db_file):
 
   return tables;
 
-def runQueries(chr,start,stop,snpset,build,db_file):
+def runQueries(chr,start,stop,snpset,build,db_file,do_annot):
   results = {};
   
   db = sqlite3.connect(db_file);
@@ -1734,7 +1735,7 @@ def runQueries(chr,start,stop,snpset,build,db_file):
   if SQLITE_REFFLAT in db_tables:
     results['refFlat'] = runQuery(refflat_in_region,[db,SQLITE_REFFLAT,chr,start,stop,build]);
   
-  if all([x in db_tables for x in (SQLITE_SNP_POS,SQLITE_VAR_ANNOT)]):
+  if all([x in db_tables for x in (SQLITE_SNP_POS,SQLITE_VAR_ANNOT)]) and do_annot:
     results['annot'] = runQuery(snp_annot_in_region,[db,SQLITE_SNP_POS,SQLITE_VAR_ANNOT,chr,start,stop,build]);
 
   if SQLITE_RECOMB_RATE in db_tables:
@@ -1866,7 +1867,10 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
 
   pqueries = {};
   print "Grabbing annotations from SQLite database..";
-  pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file);
+
+  # Starting in 1.3, var_annot is disabled by default (opts.enable_db_annot)
+  # Will be completely removed in 1.4
+  pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file,opts.enable_db_annot);
 
   user_rargs = parse_rargs(shlex.split(args));
  
@@ -1886,6 +1890,12 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
       args += " %s=%s" % (m2zarg,file);
     else:
       args += " %s=NULL" % m2zarg;
+
+  # Do we want to show annotations? If enable_db_annot is false, and the user hasn't specified
+  # their own columns in the metal/epacts file, then we should also pass showAnnot=F. 
+  has_user_annot = re.search("showAnnot|annotPch|annotCol|annotOrder",args) is not None;
+  if not (has_user_annot or opts.enable_db_annot):
+    args += " showAnnot=F";
 
   # GWAS catalog.
   if opts.gwas_cat_file != None:

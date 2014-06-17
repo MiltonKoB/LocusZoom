@@ -1,5 +1,5 @@
 tests.append(Test(
-"--prefix isoform_test --epacts tests/data/T2D.single.score.ds.sv137.OM.gpc1.2.sex.before.after.epacts.gz --refgene TCF7L2 --flank 100kb --build hg19 --source 1000G_March2012 --pop EUR showIso=T",
-title = "Testing showing isoforms and requiredGene should not cause crash"
+"--prefix custom_annot_test --metal tests/data/test_annot_col.txt --refgene TCF7L2 --build hg19 --pop EUR --source 1000G_March2012 --markercol SNPID --pvalcol PVAL annotCol=annotation annotPch=15,16,17,18,19 annotOrder=stop,non_syn,intron,syn",
+title = "Testing custom user annotations"
 ));
 
