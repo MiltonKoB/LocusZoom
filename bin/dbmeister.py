@@ -43,12 +43,12 @@ def die(msg):
   print >> sys.stderr, msg;
   sys.exit(1);
 
-def timeString(seconds):
-  tuple = time.gmtime(seconds);
-  days = tuple[2] - 1;
-  hours = tuple[3];
-  mins = tuple[4];
-  secs = tuple[5];
+def time_string(seconds):
+  time_tuple = time.gmtime(seconds);
+  days = time_tuple[2] - 1;
+  hours = time_tuple[3];
+  mins = time_tuple[4];
+  secs = time_tuple[5];
   if sum([days,hours,mins,secs]) == 0:
     return "<1s";
   else:
@@ -58,18 +58,18 @@ def timeString(seconds):
     string += ":" + str(secs) + "s";
   return string;
 
-def createLog(file=None):
+def create_log(filepath=None):
   logger = logging.getLogger(LOG_NAME);
   
   formatter = logging.Formatter("%(message)s");
   
-  if file == None:
+  if filepath is None:
     handler = logging.StreamHandler();
     handler.setFormatter(formatter);
     logger.addHandler(handler);
   else:
     handler = logging.handlers.RotatingFileHandler(
-      file,
+      filepath,
       maxBytes=2000000,
       backupCount=3
     );
@@ -80,15 +80,16 @@ def createLog(file=None):
   
   return logger;
 
-def getLog():
+def get_log():
   return logging.getLogger(LOG_NAME);
 
-def getSettings():
+def get_settings():
   p = OptionParser();
   p.add_option("-d","--db",help="Database file to modify or create.");
   p.add_option("--snp_pos",help="Flat file for SNP positions.");
   p.add_option("--refflat",help="Flat file for RefSeq Genes (refFlat) gene information.");
   p.add_option("--knowngene",help="Flat file for UCSC Genes (knownGene) gene information.");
+  p.add_option("--gencode",help="Flat file for GENCODE gene information.");
   p.add_option("--snp_set",help="Flat file for sets of SNPs.")
   p.add_option("--var_annot",help="Flat file for SNP annotation.");
   p.add_option("--recomb_rate",help="Flat file containing recombination rates.");
@@ -100,6 +101,7 @@ def getSettings():
   p.add_option("--sqlite",help="Path to SQLite3 executable, if installed. "
                "This is not required to run the program, but can help in "
                "the speed at which tables are loaded.");
+  p.add_option("--no-cleanup",help="Don't delete temporary files after usage.",default=False,action="store_true");
   p.add_option("--no-cmd-sqlite",action="store_true",default=False,help=SUPPRESS_HELP);
   p.add_option("--debug",action="store_true",default=False,help=SUPPRESS_HELP)
   
@@ -113,7 +115,7 @@ def getSettings():
   # Check input files for existence. 
   for arg in ('snp_pos','refflat','knowngene','snp_set','var_annot','recomb','trans'):
     file = getattr(opts,arg,None);
-    if file != None:
+    if file is not None:
       if not os.path.isfile(file):
         die("Error: could not find file supplied to --%s argument." % arg);
   
@@ -130,13 +132,13 @@ def getSettings():
       # Let's see if it's on their path. 
       try:
         sqlite_path = which("sqlite3");
-        if sqlite_path != '' and sqlite_path != None:
+        if sqlite_path != '' and sqlite_path is not None:
           opts.sqlite = sqlite_path;
       except:
         # Nope! We'll have to fall back to using python sqlite. 
         opts.sqlite = None;
 
-  return (opts,args);
+  return opts, args;
 
 # Check a file for proper format.
 # Cols is a list denoting each column's name.
@@ -145,7 +147,7 @@ def check_file(file,cols,delim="\t"):
   try:
     f = open(file,"U");
   except:
-    getLog().error("Error: could not open file %s." % str(file));
+    get_log().error("Error: could not open file %s." % str(file));
     return False;
     
   header = f.readline().strip();
@@ -153,7 +155,7 @@ def check_file(file,cols,delim="\t"):
   
   # Header should have same number of columns as cols. 
   if len(header_s) != len(cols):
-    getLog().error("Error: file %s does not have the proper number of "
+    get_log().error("Error: file %s does not have the proper number of "
                    "columns (or your delimiter is incorrect.)" % file);
     return False;
   
@@ -164,7 +166,7 @@ def check_file(file,cols,delim="\t"):
     c = cols[i].lower();
     
     if h != c:
-      getLog().error("Error: expected column %i's header to be '%s', "
+      get_log().error("Error: expected column %i's header to be '%s', "
                      "got '%s' instead." % (i,c,h));
       return False;
   
@@ -175,7 +177,7 @@ def check_file(file,cols,delim="\t"):
   for line in f:
     e = line.split(delim);
     if len(e) != len(cols):
-      getLog().error("Error: line %i did not have the expected number of columns. "
+      get_log().error("Error: line %i did not have the expected number of columns. "
                      "Your delimiter may be incorrect, or you may have missing data.");
       return False;
       
@@ -187,6 +189,103 @@ def check_file(file,cols,delim="\t"):
   f.close();
   
   return True;
+
+def gencode_to_refflat(gencode_file,out_file):
+  """
+  Converts a GENCODE GTF into refFlat format for insertion into the database.
+  We store both refFlat and GENCODE in refFlat format.
+  """
+
+  if gencode_file[-3:] == ".gz":
+    f = gzip.open(gencode_file);
+  else:
+    f = open(gencode_file);
+
+  try:
+    tags = set(['gene_id_noversion']);
+    cols = [
+      'chrom',
+      'provider',
+      'feature_type',
+      'start',
+      'end',
+      'score',
+      'strand',
+      'genomic_phase'
+    ];
+
+    per_transcript = {};
+
+    for line in f:
+      if line[0] == "#":
+        continue;
+
+      e = line.rstrip().split("\t");
+
+      info = e[8];
+      values = dict(re.findall("(\w+?) \"(.+?)\";",info));
+      map(tags.add,values);
+
+      for i in xrange(len(cols)):
+        values[cols[i]] = e[i];
+
+      gene_id_noversion = values['gene_id'].split(".")[0];
+      values.update({
+        'gene_id_noversion' : gene_id_noversion
+      });
+
+      if e[2] == "transcript":
+        transcript_id = values['transcript_id'];
+
+        per_transcript[transcript_id] = {
+          'txStart' : values['start'],
+          'txEnd' : values['end'],
+          'cdsStart' : "NA",
+          'cdsEnd' : "NA",
+          'geneName' : values['gene_name'],
+          'chrom' : values['chrom'],
+          'strand' : values['strand']
+        };
+
+        per_transcript[transcript_id].setdefault('exons',[]);
+
+      elif e[2] == "exon":
+        transcript_id = values['transcript_id'];
+        start = values['start'];
+        end = values['end'];
+
+        per_transcript.setdefault(transcript_id,{}).setdefault('exons',[]).append((start,end));
+
+  finally:
+    f.close();
+
+  tags = list(tags);
+  header = cols + tags;
+
+  out_file = out_file.replace(".gz","");
+
+  with open(out_file,'w') as out:
+    print >> out, "\t".join("geneName name chrom strand txStart txEnd cdsStart cdsEnd exonCount exonStarts exonEnds".split());
+    for transcript, tdata in per_transcript.iteritems():
+      exon_count = len(tdata['exons']);
+      exons_sorted = sorted(tdata['exons']); # sorts on first element in each tuple
+
+      exon_starts = ",".join([i[0] for i in exons_sorted]) + ","; # for some reason refFlat always has a trailing , at the end
+      exon_ends = ",".join([i[1] for i in exons_sorted]) + ","; # for some reason refFlat always has a trailing , at the end
+
+      print >> out, "\t".join([
+        tdata['geneName'],
+        transcript,
+        tdata['chrom'],
+        tdata['strand'],
+        tdata['txStart'],
+        tdata['txEnd'],
+        tdata['cdsStart'],
+        tdata['cdsEnd'],
+        str(exon_count),
+        exon_starts,
+        exon_ends
+      ]);
 
 # A very Java-esque way of making sure classes for interacting with a SQLite
 # database work roughly the same. 
@@ -217,7 +316,7 @@ class SQLiteCommand(SQLiteI):
     if not hasattr(cmds,'__iter__'):
       cmds = [cmds];
 
-    getLog().debug("DEBUG: running commands: \n%s" % "\n".join(cmds))
+    get_log().debug("DEBUG: running commands: \n%s" % "\n".join(cmds))
 
     # Write commands to temporary file. 
     tmp = tempfile.mkstemp();
@@ -236,7 +335,7 @@ class SQLiteCommand(SQLiteI):
     
     # Execute commands.
     sqlite_cmd = "%s %s < %s" % (self.path,self.db,tmp[1]);
-    getLog().debug("DEBUG: running %s" % sqlite_cmd);
+    get_log().debug("DEBUG: running %s" % sqlite_cmd);
     os.system(sqlite_cmd);
     
     # Remove temporary file. 
@@ -246,7 +345,7 @@ class SQLiteCommand(SQLiteI):
     self._run_cmd(query);
   
   def load_table(self,table_name,file):
-    getLog().info("Loading %s into table %s.." % (file,table_name));
+    get_log().info("Loading %s into table %s.." % (file,table_name));
     # Load table into database.
     self._run_cmd([
       ".separator \"\\t\"",
@@ -254,23 +353,23 @@ class SQLiteCommand(SQLiteI):
     ]);
   
   def create_table(self,table,columns,types):
-    getLog().info("Creating table %s.." % table);
+    get_log().info("Creating table %s.." % table);
     spec = ", ".join(map(lambda x: " ".join(x),zip(columns,types)));
     cmd = "CREATE TABLE %s ( %s );" % (table,spec);
     self._run_cmd(cmd);
     
   # Drops a table from the database. 
   def drop_table(self,table):
-    getLog().info("Dropping table %s from database %s.." % (table,self.db));
+    get_log().info("Dropping table %s from database %s.." % (table,self.db));
     cmd = "%s %s \"DROP TABLE IF EXISTS %s\"" % (self.path,self.db,table);
-    getLog().debug("DEBUG: running %s" % cmd);
+    get_log().debug("DEBUG: running %s" % cmd);
     os.system(cmd);
 
   def create_index(self,table,columns):
     if not hasattr(columns,'__iter__'):
       columns = [columns];
     
-    getLog().info("Creating index for table %s on columns %s.." % (
+    get_log().info("Creating index for table %s on columns %s.." % (
       table,
       ",".join(columns)
     ))
@@ -293,18 +392,18 @@ class SQLitePy(SQLiteI):
     try:
       self.db = sqlite3.connect(db);
     except:
-      getLog().error("Error: could not connect to %s. You might not have "
+      get_log().error("Error: could not connect to %s. You might not have "
                      "permission to read/write to this location." % db);
       raise;
   
   def create_table(self,table,columns,types):
-    getLog().info("Creating table %s.." % table);
+    get_log().info("Creating table %s.." % table);
     spec = ", ".join(map(lambda x: " ".join(x),zip(columns,types)));
     cmd = "CREATE TABLE %s ( %s );" % (table,spec);
     self.db.execute(cmd);
   
   def drop_table(self,table):
-    getLog().info("Dropping table %s from database.." % table);
+    get_log().info("Dropping table %s from database.." % table);
     cmd = "DROP TABLE IF EXISTS %s" % table;
     self.db.execute(cmd);
   
@@ -312,7 +411,7 @@ class SQLitePy(SQLiteI):
     if not hasattr(columns,'__iter__'):
       columns = [columns];
       
-    getLog().info("Creating index for table %s on columns %s.." % (
+    get_log().info("Creating index for table %s on columns %s.." % (
       table,
       ",".join(columns)
     ))
@@ -334,7 +433,7 @@ class SQLitePy(SQLiteI):
     def quote(x):
       return '"%s"' % x;
     
-    getLog().info("Loading %s into table %s.." % (file,table_name));
+    get_log().info("Loading %s into table %s.." % (file,table_name));
     
     reader = csv.reader(open(file),delimiter="\t");
     header = reader.next();
@@ -351,7 +450,7 @@ class SQLiteLoader():
   def load_snp_pos(self,file):
     file_ok = check_file(file,['snp','chr','pos']);
     if file_ok:
-      getLog().info("Loading SNP position table from file %s.." % file);
+      get_log().info("Loading SNP position table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_SNP_POS);
@@ -382,12 +481,12 @@ class SQLiteLoader():
       self.dbi.create_index(SQLITE_TRANS,'rs_orig');
     
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
 
   def load_snp_set(self,file):
     file_ok = check_file(file,['snp','snp_set']);
     if file_ok:
-      getLog().info("Loading SNP set table from file %s.." % file);
+      get_log().info("Loading SNP set table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_SNP_SET);
@@ -404,12 +503,12 @@ class SQLiteLoader():
       # Create indices.
       self.dbi.create_index(SQLITE_SNP_SET,['snp']);
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
 
   def load_recomb_rate(self,file):
     file_ok = check_file(file,['chr','pos','recomb','cm_pos']);
     if file_ok:
-      getLog().info("Loading recombination rates table from file %s.." % file);
+      get_log().info("Loading recombination rates table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_RECOMB_RATE);
@@ -428,7 +527,7 @@ class SQLiteLoader():
       # Create indices.
       self.dbi.create_index(SQLITE_RECOMB_RATE,['chr','pos']);
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
   
   def load_refflat(self,file):
     columns = "geneName,name,chrom,strand,txStart,txEnd,cdsStart,cdsEnd,"\
@@ -437,7 +536,7 @@ class SQLiteLoader():
             "BLOB,BLOB,INTEGER".split(",");
     file_ok = check_file(file,columns);
     if file_ok:
-      getLog().info("Loading refFlat table from file %s.." % file);
+      get_log().info("Loading refFlat table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_REFFLAT);
@@ -457,7 +556,36 @@ class SQLiteLoader():
       self.dbi.create_index(SQLITE_REFFLAT,['chrom','txStart','txEnd']);
       self.dbi.create_index(SQLITE_REFFLAT,['geneName']);
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
+
+  def load_gencode(self,file):
+    columns = "geneName,name,chrom,strand,txStart,txEnd,cdsStart,cdsEnd,"\
+              "exonCount,exonStarts,exonEnds".split(",");
+    types = "TEXT,TEXT,TEXT,TEXT,INTEGER,INTEGER,INTEGER,INTEGER,INTEGER,"\
+            "BLOB,BLOB,INTEGER".split(",");
+    file_ok = check_file(file,columns);
+    if file_ok:
+      get_log().info("Loading refFlat table from file %s.." % file);
+
+      # Drop the original table if one existed.
+      self.dbi.drop_table(SQLITE_GENCODE);
+
+      # Create table.
+      self.dbi.create_table(SQLITE_GENCODE,
+                        columns,
+                        types);
+
+      # Load table into database.
+      self.dbi.load_table(SQLITE_GENCODE,file);
+
+      # Get rid of header row.
+      self.dbi.remove_header(SQLITE_GENCODE,'geneName','geneName');
+
+      # Create indices.
+      self.dbi.create_index(SQLITE_GENCODE,['chrom','txStart','txEnd']);
+      self.dbi.create_index(SQLITE_GENCODE,['geneName']);
+    else:
+      get_log().info("Skipping file %s due to errors.." % file);
 
   def load_knowngene(self,file):
     columns = "geneName,name,chrom,strand,txStart,txEnd,cdsStart,cdsEnd,"\
@@ -466,7 +594,7 @@ class SQLiteLoader():
             "BLOB,BLOB,INTEGER".split(",");
     file_ok = check_file(file,columns);
     if file_ok:
-      getLog().info("Loading knownGene (custom) table from file %s.." % file);
+      get_log().info("Loading knownGene (custom) table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_KNOWNGENE);
@@ -486,12 +614,12 @@ class SQLiteLoader():
       self.dbi.create_index(SQLITE_KNOWNGENE,['chrom','txStart','txEnd']);
       self.dbi.create_index(SQLITE_KNOWNGENE,['geneName']);
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
 
   def load_var_annot(self,file):
     file_ok = check_file(file,['snp','chr','pos','annot_rank']);
     if file_ok:
-      getLog().info("Loading SNP annotation table from file %s.." % file);
+      get_log().info("Loading SNP annotation table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_VAR_ANNOT);
@@ -510,12 +638,12 @@ class SQLiteLoader():
       # Create indices.
       self.dbi.create_index(SQLITE_VAR_ANNOT,['snp']);
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
       
   def load_trans(self,file):
     file_ok = check_file(file,['rs_orig','rs_current']);
     if file_ok:
-      getLog().info("Loading SNP annotation table from file %s.." % file);
+      get_log().info("Loading SNP annotation table from file %s.." % file);
       
       # Drop the original table if one existed.
       self.dbi.drop_table(SQLITE_TRANS);
@@ -535,28 +663,28 @@ class SQLiteLoader():
       self.dbi.create_index(SQLITE_TRANS,['rs_orig']);
       self.dbi.create_index(SQLITE_TRANS,['rs_current']);
     else:
-      getLog().info("Skipping file %s due to errors.." % file);
+      get_log().info("Skipping file %s due to errors.." % file);
 
 # Entry point. 
 def main():
   # Settings. 
-  (opts,args) = getSettings();
+  (opts,args) = get_settings();
   
   # Setup our log.
   # If --log was specified, creates a log file.
   # Otherwise, messages are spit to the console. 
-  createLog(opts.log);
+  create_log(opts.log);
   if opts.debug:
-    getLog().setLevel(logging.DEBUG);
+    get_log().setLevel(logging.DEBUG);
   
   # Set SQL interface. 
   if opts.sqlite:
-    getLog().debug("DEBUG: using command line sqlite3");
+    get_log().debug("DEBUG: using command line sqlite3");
     sqlitei = SQLiteCommand(opts.db,opts.sqlite);
     loader = SQLiteLoader(sqlitei);
   else:
-    getLog().debug("DEBUG: using python sqlite3");
-    getLog().warning("Using python implementation of sqlite - this will be "
+    get_log().debug("DEBUG: using python sqlite3");
+    get_log().warning("Using python implementation of sqlite - this will be "
                      "much slower than installing sqlite3 on your system.");
     sqlitei = SQLitePy(opts.db);
     loader = SQLiteLoader(sqlitei);
@@ -581,11 +709,25 @@ def main():
   if opts.knowngene:
     loader.load_knowngene(opts.knowngene);
 
+  if opts.gencode:
+    # We need to convert the GENCODE annotation GTF into refFlat format.
+    gencode_refflat_file = opts.gencode.replace(".gtf.gz",".refFlat.tab");
+    gencode_to_refflat(opts.gencode,gencode_refflat_file);
+
+    # Now we can load the refFlat formatted version of GENCODE
+    loader.load_gencode(gencode_refflat_file);
+
+    if not opts.no_cleanup:
+      try:
+        os.remove(gencode_refflat_file);
+      except:
+        pass
+
   if opts.var_annot:
     loader.load_var_annot(opts.var_annot);
 
   end = time.time();
-  getLog().debug("DEBUG: duration %s" % timeString(end - start));
+  get_log().debug("DEBUG: duration %s" % time_string(end - start));
 
 if __name__ == "__main__":
   main();

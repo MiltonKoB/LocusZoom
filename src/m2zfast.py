@@ -87,6 +87,7 @@ MULTI_CAP = 8;
 SQLITE_SNP_POS = "snp_pos";
 SQLITE_REFFLAT = "refFlat";
 SQLITE_KNOWNGENE = "knownGene";
+SQLITE_GENCODE = "gencode";
 SQLITE_SNP_SET = "snp_set";
 SQLITE_VAR_ANNOT = "var_annot";
 SQLITE_RECOMB_RATE = "recomb_rate";
@@ -992,8 +993,8 @@ def printOpts(opts):
   if opts.gwas_cat:
     table.add_row(['gwas-cat',opts.gwas_cat]);
 
-  display_opts = ('flank','build','ld','ld_measure','pop','source','snpset','db','cache',
-    'no_clean','no_transform','verbose','m2zpath','plotonly'
+  display_opts = ('flank','build','ld','ld_measure','pop','source','snpset','db','gene_table','cache',
+    'no_clean','no_transform','enable_db_annot','verbose','m2zpath','plotonly'
   );
  
   if opts.ld_vcf:
@@ -1005,8 +1006,9 @@ def printOpts(opts):
 
   for opt in display_opts:
     val = getattr(opts,opt);
-    if val != None and val:
-        table.add_row([opt,str(val)]);
+    if val is not None and val:
+      opt = opt.replace("_","-");
+      table.add_row([opt,str(val)]);
     
   table.printt();
 
@@ -1111,6 +1113,9 @@ def getSettings():
   parser.add_option("--ld-measure",dest="ld_measure",help="Specify LD measure to use. Can be either 'rsquare' or 'dprime'. Default is rsquare.");
   parser.add_option("--no-ld",dest="no_ld",help="Disable calculating and displaying LD information.",action="store_true");
   parser.add_option("--enable-db-annot",action="store_true",default=False,help="Enable pulling variant annotation from SQLite. This is for backwards compatibility only in 1.3, will be completely disabled in 1.4.");
+
+  # Options controlling which database tables to use
+  parser.add_option("--gene-table",help="Name of gene table to use in database. Defaults to 'refFlat'. GENCODE is also supplied for some builds - use 'gencode'.",default=SQLITE_REFFLAT);
 
   gwas_help = "Select GWAS catalog to use for plotting GWAS hits track. Available catalogs are: {spacer}{tables}".format(
     spacer = "".join([os.linesep]*2),
@@ -1725,15 +1730,15 @@ def listTables(db_file):
 
   return tables;
 
-def runQueries(chr,start,stop,snpset,build,db_file,do_annot):
+def runQueries(chr,start,stop,snpset,build,db_file,do_annot,gene_table):
   results = {};
   
   db = sqlite3.connect(db_file);
  
   db_tables = listTables(db_file);
 
-  if SQLITE_REFFLAT in db_tables:
-    results['refFlat'] = runQuery(refflat_in_region,[db,SQLITE_REFFLAT,chr,start,stop,build]);
+  if gene_table in db_tables:
+    results['refFlat'] = runQuery(refflat_in_region,[db,gene_table,chr,start,stop,build]);
   
   if all([x in db_tables for x in (SQLITE_SNP_POS,SQLITE_VAR_ANNOT)]) and do_annot:
     results['annot'] = runQuery(snp_annot_in_region,[db,SQLITE_SNP_POS,SQLITE_VAR_ANNOT,chr,start,stop,build]);
@@ -1870,7 +1875,7 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
 
   # Starting in 1.3, var_annot is disabled by default (opts.enable_db_annot)
   # Will be completely removed in 1.4
-  pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file,opts.enable_db_annot);
+  pqueries = runQueries(chr,start,end,opts.snpset,build,opts.sqlite_db_file,opts.enable_db_annot,opts.gene_table);
 
   user_rargs = parse_rargs(shlex.split(args));
  
