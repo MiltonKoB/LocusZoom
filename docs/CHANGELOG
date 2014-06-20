@@ -1,5 +1,33 @@
-1.2:
-----
+1.3 (June 20, 2014)
+-------------------
+
+Bug fixes:
+-- Fix for R 3.1's strange idea to change how read.table works in regards to converting obviously numeric columns into char/factors if precision loss was detected. This caused locuszoom to fail completely with a cryptic (for users) error message regarding an operation being meaningless for factors
+-- Previously, only variants with the format rs# or chr#:### were allowed, now variants without chr (e.g. #:####) are also allowed
+-- Isoform names were not appearing when showIso=T
+-- requiredGene sometimes did not work correctly with isoforms, or when the required gene was not available in the region
+-- Fixed very old bug where isoforms would not be plotted at all in certain cases
+-- Fixed bug when plotting within 1 gene containing 0 exons in the plotting region selected
+-- Fixed min/max p-value on second page of PDF
+-- warnMissingGenes was mistakenly disabled - is now re-enabled by default (this shows the warning to the right of the genes when there are too many genes to plot)
+-- Fixed bzipped files not being detected properly
+-- Fixed when users give variants named "RS####" instead of "rs####"
+
+Backward compatibilty issues: 
+-- Use of built-in annotations (from the .db file) is disabled now by default. These were very old, with no plans of bringing them up to date. Users were likely already using custom annotations with their files. If you however had modified your database previously to use the var_annot table, and still would like to pull annotations from it, use --enable-db-annot
+
+Features added: 
+-- lzupdate.py script to automatically create/update a database file. This script will download data from UCSC/NCBI/GENCODE, format it appropriately, and insert it into a sqlite3 file that can be used with locuszoom. 
+-- Database provided with release has been updated as of June 20, 2014
+-- Added drawing of multiple horizontal significance lines, use signifLine="5e-08,1e-10" for example. Can also change each line's width and color using signifLineColor="red,blue" or signifLineWidth="2,4"
+-- Added support for plotting BED tracks. Use --bed-tracks <BED file> to add tracks below plot, 1 track per label in the label column of the BED file
+-- Change color of each marker arbitrarily by specifying a column in your association results containing a color name or hex code, then tell locuszoom the column by using colorCol="name_of_col". This disables showing color by LD. 
+-- Can provide a JSON file mapping from specific chromosome names to individual VCF files to use when calculating LD (just provide the JSON file directly to --ld-vcf) 
+-- Added options to control the names of EPACTS columns, as the format is still in flux slightly (--epacts-chrom-col, --epacts-beg-col, --epacts-end-col, --epacts-pval-col) 
+-- Can specify a GWAS catalog file now directly with --gwas-cat, rather than providing the name of a built-in catalog. The built-in catalogs are still available as well
+
+1.2 (May 9, 2013)
+-----------------
 
 Bug fixes:
 -- dbmeister.py would complain about not being able to find which
@@ -17,8 +45,8 @@ Features added:
 -- calculate LD from VCF files
 -- load EPACTs result files directly
 
-1.1:
-----
+1.1 (June 20, 2011)
+-------------------
 
 Bug fixes: 
 -- hitspec with blank lines would cause crash 
@@ -44,15 +72,17 @@ Features removed:
 -- removed support for pre-computed LD (this was not being maintained, bloated the code, and often was a "cache miss") 
 -- (CSG internal version) removed SQL database connections, now runs entirely from sqlite database
 
-1.0.3:
-------
+1.0.3 (Dec 1, 2010)
+-------------------
+
 -- fixed bug where metal files with p-values only within the range [0.1,1] were double -log10 transformed
 -- fixed bug in dbmeister.py where indices were not being created after inserting a new snp_pos table, resulting in absurdly long runtimes
 -- fixed bug where user supplied database would cause a crash in certain instances (especially forcing offline mode with --offline 1) 
 -- changed how gzip/bzip2 files are detected (no longer depends on file extension) 
 
-1.0.2:
------- 
+1.0.2 (Sept 27, 2010)
+---------------------
+
 -- added LD files for 1000G June 2010 release
 -- added additional populations to LD files for 1000G Aug 2009 (now includes YRI and CHB+JPT). 
 -- added support for automatically converting between 1000G chr:pos format and rs# format for SNPs when a difference exists between the user's association results file and LD genotype files (try to use rs# naming if possible, as this is less error prone)
@@ -61,8 +91,8 @@ Features removed:
 -- changed --ld to allow for both relative and absolute paths
 -- changed error message to read "locuszoom.R" instead of previous "metal2zoom.R"
 
-1.0.1:
-------
+1.0.1 (June 10, 2010)
+---------------------
 -- fixed crash if user's python was not compiled with bz2 support
 -- fixed --cache None, this will now properly skip creating a LD cache file
 
