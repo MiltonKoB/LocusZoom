@@ -48,6 +48,7 @@ from prettytable import *
 from textwrap import fill
 from vcf_ld import *
 from verboseparser import *
+from cStringIO import StringIO
 
 # Try importing modules that may not exist on a user's machine. 
 try:
@@ -608,26 +609,55 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
 # Given an EPACTS file, this function extracts the region from the file between
 # chr/start/end.
 def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_transform):
-  region = "chr%s:%s-%s" % (str(chr),start,end);
+  conf = getConf();
+  region = "%s:%s-%s" % (str(chr),start,end);
   output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
 
   chr = int(chr);
   start = int(start);
   end = int(end);
 
-  # Open file for reading. Attempt to determine if file is compressed before opening. 
-  if is_gzip(epacts_file):
-    try:
-      f = gzip.open(epacts_file); # throws exception if gz not on system
-    except:
-      die("Error: gzip is not supported on your system, cannot read --epacts file.");
-  elif is_bz2(epacts_file):
-    try:
-      f = bz2.BZ2File(epacts_file,"rU");
-    except NameError:
-      die("Error: bz2 is not supported on your system, cannot read --epacts file.");
+  # Does the EPACTS file have a tabix index with it? If it does, we can use tabix to pull the region out and make
+  # parsing much faster.
+  has_index = os.path.isfile(epacts_file + ".tbi");
+  tabix_path = find_systematic(conf.TABIX_PATH);
+
+  # Do we have both tabix, and the EPACTS file has a tabix index?
+  f = None;
+  if has_index and tabix_path is not None:
+    # Run tabix to pull out our region.
+    print "Tabix found, using index to extract region..";
+    proc = subprocess.Popen([tabix_path,"-h",epacts_file,region],stdout=subprocess.PIPE,stderr=subprocess.PIPE);
+    stdout, stderr = proc.communicate();
+
+    # No variants in the region...
+    if stdout == '':
+      raise IOError, "Error: no variants in region (%s) when using tabix on EPACTS file" % region;
+
+    # Unknown error occurred
+    if stderr != '':
+      raise IOError, "Error: while grabbing region from EPACTS file, tabix generated an error: \n%s" % stderr;
+
+    # Setup the input handle for reading.
+    f = StringIO(stdout);
+
   else:
-    f = open(epacts_file,"rU");
+    # Open file for reading. Attempt to determine if file is compressed before opening.
+    if is_gzip(epacts_file):
+      try:
+        f = gzip.open(epacts_file); # throws exception if gz not on system
+      except:
+        die("Error: gzip is not supported on your system, cannot read --epacts file.");
+    elif is_bz2(epacts_file):
+      try:
+        f = bz2.BZ2File(epacts_file,"rU");
+      except NameError:
+        die("Error: bz2 is not supported on your system, cannot read --epacts file.");
+    else:
+      f = open(epacts_file,"rU");
+
+  if f is None:
+    raise IOError, "Unknown error while loading EPACTS file, contact developer with this traceback";
 
   # Find column indices. 
   epacts_header = f.next().split("\t");
@@ -635,17 +665,17 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
 
   # Find chr/begin/end columns. 
   try:
-   chr_col = epacts_header.index(chr_col);
-   begin_col = epacts_header.index(beg_col);
-   end_col = epacts_header.index(end_col);
+    chr_col = epacts_header.index(chr_col);
+    begin_col = epacts_header.index(beg_col);
+    end_col = epacts_header.index(end_col);
   except:
-   raise IOError, "Error: could not find chrom/begin/end columns in EPACTS file. Try specifying --epacts-chr-col, --epacts-beg-col, --epacts-end-col.";
+    raise IOError, "Error: could not find chrom/begin/end columns in EPACTS file. Try specifying --epacts-chr-col, --epacts-beg-col, --epacts-end-col.";
 
   # Find p-value column.
   try:
-   pval_col = epacts_header.index(pval_col);
+    pval_col = epacts_header.index(pval_col);
   except:
-   raise IOError, "Error: could not find p-value column in EPACTS file. Try specifying with --epacts-pval-col.";
+    raise IOError, "Error: could not find p-value column in EPACTS file. Try specifying with --epacts-pval-col.";
   
   out = open(output_file,"w");
   print >> out, "\t".join(['chr','pos','MarkerName','P-value']);

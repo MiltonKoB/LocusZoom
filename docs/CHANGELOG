@@ -18,6 +18,7 @@ Backward compatibilty issues:
 
 Features added: 
 -- lzupdate.py script to automatically create/update a database file. This script will download data from UCSC/NCBI/GENCODE, format it appropriately, and insert it into a sqlite3 file that can be used with locuszoom. 
+-- lzupdate.py can also generate an updated GWAS catalog (use --gwas-cat)
 -- Database provided with release has been updated as of June 20, 2014
 -- Added drawing of multiple horizontal significance lines, use signifLine="5e-08,1e-10" for example. Can also change each line's width and color using signifLineColor="red,blue" or signifLineWidth="2,4"
 -- Added support for plotting BED tracks. Use --bed-tracks <BED file> to add tracks below plot, 1 track per label in the label column of the BED file
