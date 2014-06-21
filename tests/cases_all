@@ -653,3 +653,9 @@ tests.append(Test(
 title = "Testing GENCODE genes instead of refFlat"
 ));
 
+# Add test for tabix index
+tests.append(Test(
+"--epacts tests/data/got2d_exome_chip_multiassoc_studyage-1_BMI-1_smokefix-1_dropstatin-1_dropt2d-1.epacts.gz --refgene FADS1 --epacts-pval-col MUFA.P --epacts-beg-col BEG --prefix test_tabix --no-cleanup --build hg19 --pop EUR --source 1000G_March2012",
+title = "Testing EPACTS file with tabix index"
+));
+
