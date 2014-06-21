@@ -20,20 +20,10 @@
 import sys
 import os
 
-# Python executable. 
-pyex = sys.executable;
+srcdir = os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])),"../src");
+sys.path.insert(0,srcdir);
 
-# First, try to find locuszoom at a relative location to where this script is located. 
-script_dir = os.path.dirname(os.path.realpath(sys.argv[0]));
-locuszoom = os.path.join(script_dir,"../src/m2zfast.py");
-if os.path.isfile(locuszoom):
-  args = map(lambda x: '"%s"' % x,sys.argv[1:]);
-  e = pyex + " -OO " + locuszoom + " " + " ".join(args);
-  os.system(e);
+from m2zfast import main
 
-# That apparently failed, so now let's try the environment variable "LOCUSZOOM_PATH". 
-locuszoom_path = os.environ.get("LOCUSZOOM_PATH");
-if locuszoom_path != None:
-  locuszoom_abspath = os.path.join(locuszoom_path,"src/m2zfast.py");
-  e = pyex + " -OO " + locuszoom_abspath + " " + " ".join(sys.argv[1:]);
-  os.system(e);
+main();
+

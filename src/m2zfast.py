@@ -493,19 +493,22 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
 
   cur.close();
 
-  # Open file for reading. Attempt to determine if file is compressed before opening. 
-  if is_gzip(metal_file):
-    try:
-      f = gzip.open(metal_file); # throws exception if gz not on system
-    except:
-      die("Error: gzip is not supported on your system, cannot read --metal file.");
-  elif is_bz2(metal_file):
-    try:
-      f = bz2.BZ2File(metal_file,"rU");
-    except NameError:
-      die("Error: bz2 is not supported on your system, cannot read --metal file.");
+  # Open file for reading. Attempt to determine if file is compressed before opening.
+  if metal_file == "-":
+    f = sys.stdin;
   else:
-    f = open(metal_file,"rU");
+    if is_gzip(metal_file):
+      try:
+        f = gzip.open(metal_file); # throws exception if gz not on system
+      except:
+        die("Error: gzip is not supported on your system, cannot read --metal file.");
+    elif is_bz2(metal_file):
+      try:
+        f = bz2.BZ2File(metal_file,"rU");
+      except NameError:
+        die("Error: bz2 is not supported on your system, cannot read --metal file.");
+    else:
+      f = open(metal_file,"rU");
 
   # Find snp column.
   metal_header = f.next().split(delim);
@@ -617,44 +620,48 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
   start = int(start);
   end = int(end);
 
-  # Does the EPACTS file have a tabix index with it? If it does, we can use tabix to pull the region out and make
-  # parsing much faster.
-  has_index = os.path.isfile(epacts_file + ".tbi");
-  tabix_path = find_systematic(conf.TABIX_PATH);
-
-  # Do we have both tabix, and the EPACTS file has a tabix index?
-  f = None;
-  if has_index and tabix_path is not None:
-    # Run tabix to pull out our region.
-    print "Tabix found, using index to extract region..";
-    proc = subprocess.Popen([tabix_path,"-h",epacts_file,region],stdout=subprocess.PIPE,stderr=subprocess.PIPE);
-    stdout, stderr = proc.communicate();
-
-    # No variants in the region...
-    if stdout == '':
-      raise IOError, "Error: no variants in region (%s) when using tabix on EPACTS file" % region;
-
-    # Unknown error occurred
-    if stderr != '':
-      raise IOError, "Error: while grabbing region from EPACTS file, tabix generated an error: \n%s" % stderr;
-
-    # Setup the input handle for reading.
-    f = StringIO(stdout);
-
+  # Should we just read from STDIN?
+  if epacts_file == "-":
+    f = sys.stdin;
   else:
-    # Open file for reading. Attempt to determine if file is compressed before opening.
-    if is_gzip(epacts_file):
-      try:
-        f = gzip.open(epacts_file); # throws exception if gz not on system
-      except:
-        die("Error: gzip is not supported on your system, cannot read --epacts file.");
-    elif is_bz2(epacts_file):
-      try:
-        f = bz2.BZ2File(epacts_file,"rU");
-      except NameError:
-        die("Error: bz2 is not supported on your system, cannot read --epacts file.");
+    # Does the EPACTS file have a tabix index with it? If it does, we can use tabix to pull the region out and make
+    # parsing much faster.
+    has_index = os.path.isfile(epacts_file + ".tbi");
+    tabix_path = find_systematic(conf.TABIX_PATH);
+
+    # Do we have both tabix, and the EPACTS file has a tabix index?
+    f = None;
+    if has_index and tabix_path is not None:
+      # Run tabix to pull out our region.
+      print "Tabix found, using index to extract region..";
+      proc = subprocess.Popen([tabix_path,"-h",epacts_file,region],stdout=subprocess.PIPE,stderr=subprocess.PIPE);
+      stdout, stderr = proc.communicate();
+
+      # No variants in the region...
+      if stdout == '':
+        raise IOError, "Error: no variants in region (%s) when using tabix on EPACTS file" % region;
+
+      # Unknown error occurred
+      if stderr != '':
+        raise IOError, "Error: while grabbing region from EPACTS file, tabix generated an error: \n%s" % stderr;
+
+      # Setup the input handle for reading.
+      f = StringIO(stdout);
+
     else:
-      f = open(epacts_file,"rU");
+      # Open file for reading. Attempt to determine if file is compressed before opening.
+      if is_gzip(epacts_file):
+        try:
+          f = gzip.open(epacts_file); # throws exception if gz not on system
+        except:
+          die("Error: gzip is not supported on your system, cannot read --epacts file.");
+      elif is_bz2(epacts_file):
+        try:
+          f = bz2.BZ2File(epacts_file,"rU");
+        except NameError:
+          die("Error: bz2 is not supported on your system, cannot read --epacts file.");
+      else:
+        f = open(epacts_file,"rU");
 
   if f is None:
     raise IOError, "Unknown error while loading EPACTS file, contact developer with this traceback";
@@ -1258,33 +1265,40 @@ def getSettings():
     die_help("Must specify either --refgene or --hitspec. These options are mutually exclusive.",parser);
   
   # Perform checks on input file. 
-  if opts.metal:
-    input_file = find_systematic(opts.metal);
-    if input_file == None:
-      die("Error: could not find file: %s" % opts.metal);
+  if opts.metal is not None:
+    if opts.metal != "-":
+      input_file = find_systematic(opts.metal);
+      if input_file is None:
+        die("Error: could not find file: %s" % opts.metal);
 
-    opts.metal = input_file;
+      opts.metal = input_file;
+    else:
+      input_file = "-";
 
-  elif opts.epacts:
-    input_file = find_systematic(opts.epacts);
-    if input_file == None:
-      die("Error: could not find file: %s" % opts.epacts);
+  elif opts.epacts is not None:
+    if opts.epacts != "-":
+      input_file = find_systematic(opts.epacts);
+      if input_file is None:
+        die("Error: could not find file: %s" % opts.epacts);
 
-    opts.epacts = input_file;
+      opts.epacts = input_file;
+    else:
+      input_file = "-";
 
     opts.delim = "\t";
     opts.pvalcol = "P-value",
-    opts.snpcol = "MarkerName", 
+    opts.snpcol = "MarkerName",
   else:
     die("Error: must supply either --metal or --epacts file.");
 
-  # Check metal file size. 
-  if os.path.getsize(input_file) <= 0:
-    die("Error: input file is empty: %s" % str(input_file));
+  # Check file size if appropriate.
+  if input_file != "-":
+    if os.path.getsize(input_file) <= 0:
+      die("Error: input file is empty: %s" % str(input_file));
 
-  # Check if we have access rights. 
-  if not os.access(input_file, os.R_OK):
-    die("Error: cannot access input file, insufficient permissions: %s" % str(input_file));
+    # Check if we have access rights.
+    if not os.access(input_file, os.R_OK):
+      die("Error: cannot access input file, insufficient permissions: %s" % str(input_file));
 
   # Fix delimiter.
   if opts.delim in ("tab","\\t","\t"):

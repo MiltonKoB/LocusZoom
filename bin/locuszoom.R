@@ -77,6 +77,8 @@ char2Rname <- function(x) {
   x <- gsub('-','.',x);
   x <- gsub('=','.',x);
   x <- gsub('\ ','.',x);
+  x <- gsub("^#","X.",x);
+  x <- gsub("#",".",x);
   return(x)
 }
 
@@ -2990,7 +2992,7 @@ if ( is.null(args[['reload']]) ) {
       pval_col = char2Rname(args[['pvalCol']]);
       col_classes[[pval_col]] = "numeric";
       
-      metal <- read.file(args[['metal']],sep="\t",colClasses=col_classes);
+      metal <- read.file(args[['metal']],sep="\t",colClasses=col_classes,comment.char="");
     } else {
       stop(paste('No such file: ', args[['metal']]));
     }
