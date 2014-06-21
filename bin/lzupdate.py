@@ -17,9 +17,15 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #===============================================================================
 
-import os, sys, re, gzip, urllib, urllib2, tempfile, ftplib, time
+import os, sys, re, gzip, urllib, urllib2, tempfile, ftplib, time, traceback
 import os.path as path
 from optparse import OptionParser
+from decimal import Decimal
+
+# Import needed machinery from core program
+sys.path.insert(0,os.path.join(os.path.dirname(sys.argv[0]),"../src/"));
+from m2zfast import *
+from m2zutils import which, find_relative, find_systematic
 
 # Constants.
 DBMEISTER = "bin/dbmeister.py";
@@ -32,75 +38,13 @@ GENCODE_URL = "ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/";
 GENCODE_FTP = "ftp.sanger.ac.uk";
 GUNZIP_PATH = "gunzip";
 REFFLAT_HEADER = "geneName name chrom strand txStart txEnd cdsStart cdsEnd exonCount exonStarts exonEnds".split();
+GWAS_PVAL = "5e-08";
+GWAS_CAT_URL = "http://www.genome.gov/admin/gwascatalog.txt";
 
 UCSC_TO_GRC = {
-  'hg19' : 'GRCh37'
+  'hg19' : 'GRCh37',
+  'hg38' : 'GRCh38'
 }
-
-# Utility functions.
-
-def which(f):
-  for path in os.environ['PATH'].split(os.pathsep):
-    if not os.path.exists(path):
-      continue;
-
-    if not os.path.isdir(path):
-      continue;
-
-    for file in os.listdir(path):
-      if os.path.basename(f) == file:
-        return os.path.join(path,file);
-
-  return None;
-
-def find_relative(file):
-  full_path = None;
-
-  # Find the m2zfast root, using the script's location.
-  start_loc = os.path.realpath(sys.argv[0]);
-  script_dir = None;
-  if os.path.isdir(start_loc):
-    script_dir = start_loc;
-  else:
-    script_dir = os.path.dirname(start_loc);
-  root_dir = os.path.join(script_dir,"../");
-
-  # If the file to find has a path, it means it is a path relative
-  # to the m2zfast root. We need to attach that path to the root.
-  (file_path,file_name) = os.path.split(file);
-  if file_path != "":
-    root_dir = os.path.abspath(os.path.join(root_dir,file_path));
-
-  if file_name == "" or file_name is None:
-    if os.path.exists(root_dir):
-      full_path = root_dir;
-  else:
-    temp_path = os.path.join(root_dir,file_name);
-    if os.path.exists(temp_path):
-      full_path = temp_path;
-
-  return full_path;
-
-# Tries to find a file in the following order:
-# 1) the given file (duh)
-# 2) relative to m2zfast's root directory
-# 3) on the user's path
-def find_systematic(file):
-  if file is None:
-    return None;
-
-  if os.path.isfile(file):
-    return os.path.abspath(file);
-
-  relative = find_relative(file);
-  if relative:
-    return relative;
-
-  whiched_file = which(file);
-  if whiched_file is not None:
-    return whiched_file;
-
-  return None;
 
 # Function to see if a given URL actually exists.
 def exists(url):
@@ -112,10 +56,89 @@ def exists(url):
 
   return True;
 
+def remove_file(filepath):
+  try:
+    os.remove(filepath);
+  except Exception as e:
+    print >> sys.stderr, "Error: tried to remove file %s, but the following error occurred: " % filepath;
+    print >> sys.stderr, traceback.print_exc();
+
 def dl_hook(count,block_size,total_size):
   percent = min(100,count*block_size*100.0/total_size);
   sys.stdout.write("\r%.1f%%" % percent)
   sys.stdout.flush()
+
+def download_gwas_catalog(url,outpath):
+  if os.path.isfile(outpath):
+    os.remove(outpath);
+
+  urllib.urlretrieve(url,outpath,reporthook=dl_hook);
+
+def parse_gwas_catalog(filepath,dbpath,outpath):
+  snp_to_pos = PosLookup(dbpath);
+
+  with open(filepath) as f, open(outpath,'w') as out:
+    f.readline();
+
+    print >> out, "\t".join("chr pos trait snp".split());
+
+    seen_trait_snps = set();
+    for line in f:
+      if line.strip() == "":
+        continue;
+
+      e = line.split("\t");
+
+      trait, snps, pval = (e[i] for i in (7,21,27));
+
+      # Is the GWAS p-value significant? Note that sometimes these can be astronomical,
+      # so we use Decimal to handle them.
+      try:
+        dec_pval = Decimal(pval);
+        if dec_pval > GWAS_PVAL:
+          continue;
+      except:
+        continue;
+
+      # Is the trait not blank?
+      if trait.strip() == "":
+        continue;
+
+      # There can be multiple SNPs on the same line for the same trait.
+      snps = [i.strip() for i in snps.split(",")];
+
+      # Sometimes, SNPs are specified as a haplotype with "rs1:rs2"
+      for i in xrange(len(snps)):
+        isnp = snps[i];
+
+        if isnp.startswith("rs") and ':' in isnp:
+          # It's a haplotype.
+          haplo_snps = [s.strip() for s in isnp.split(":")];
+          snps.extend(haplo_snps);
+          snps.pop(i);
+
+      for snp in snps:
+        if not snp.startswith("rs"):
+          continue;
+
+        # Find the position for this SNP.
+        chrom, pos = snp_to_pos(snp);
+
+        # If it didn't have a chrom/pos in the database, we can't use it.
+        if None in (chrom, pos):
+          print >> sys.stderr, "Warning: could not find chrom/pos for variant %s while parsing GWAS catalog, skipping.." % snp;
+          continue;
+
+        # If we've already seen this association, we don't need to print it.
+        key = "%s_%s_%s_%s" % (snp,chrom,pos,trait);
+        if key in seen_trait_snps:
+          continue;
+        else:
+          seen_trait_snps.add(key);
+
+        print >> out, "\t".join(map(str,[chrom,pos,trait,snp]));
+
+  return outpath;
 
 class UCSCManager:
   UCSC_MAIN_URL = "http://hgdownload.cse.ucsc.edu/goldenPath";
@@ -428,7 +451,8 @@ def parse_ucsc_snp_table(filepath,out):
 def get_settings():
   p = OptionParser();
   p.add_option("-b","--build",help="Genome build (UCSC convention), e.g. hg18, hg19, etc.",default="hg19");
-  p.add_option("--gencode",help="Also build a gene table using GENCODE. This specifies the relase number.");
+  p.add_option("--gencode",help="Build a gene table using GENCODE. This specifies the relase number.");
+  p.add_option("--gwas-cat",help="Build a gwas catalog file.",action="store_true",default=False);
   p.add_option("--db",help="Database name. Defaults to locuszoom_%build%.db.")
   p.add_option("--no-cleanup",help="Leave temporary files alone after creating database instead of deleting them.",default=False,action="store_true");
 
@@ -526,19 +550,40 @@ def main():
   with open(db_info,'w') as info_out:
     print >> info_out, time.strftime("Database created at %H:%M:%S %Z on %B %d %Y");
 
-  # Delete all of the temporary files/directories we created.
-  if not opts.no_cleanup:
-    for f in [snp_table_file,fixed_snp_tab,refflat,fixed_refflat,merge_file,refsnp_trans_file,gencode_file]:
-      try:
-        os.remove(f);
-      except:
-        pass
-
   print "\nDatabase successfully created: %s" % db_name;
   print "To use this database, you can either: \n" \
         "1) pass it to locuszoom using the --db argument, \n" \
         "2) overwrite an existing database in <lzroot>/data/database/ (backup the existing one first!), or \n" \
-        "3) add it wherever you would like, and then modify <lzroot>/conf/m2zfast.conf to point to it\n";
+        "3) add it wherever you would like, and then modify <lzroot>/conf/m2zfast.conf to point to it\n\n";
+
+  # Should we also try to build a GWAS catalog?
+  if opts.gwas_cat:
+    # Download the catalog
+    print "Downloading NHGRI GWAS catalog..";
+    gwas_cat_file = "from_nhgri_gwascatalog_%s.txt" % build;
+    download_gwas_catalog(GWAS_CAT_URL,gwas_cat_file);
+
+    # Do some filtering and reformatting, and looking up positions for this genome build
+    print "\nParsing/reformatting GWAS catalog..";
+    final_gwas_cat = "gwas_catalog_%s.txt" % build;
+    parse_gwas_catalog(gwas_cat_file,db_name,final_gwas_cat);
+
+    print "\nCreated GWAS catalog for locuszoom: %s" % final_gwas_cat;
+    print "To use this file, you can either: \n" \
+          "1) pass it to locuszoom using the --gwas-cat argument, \n" \
+          "2) overwrite the existing catalog in <lzroot>/data/gwas_catalog/ (backing up your existing file first!), or \n" \
+          "3) add it wherever you like, and add it to <lzroot>/conf/m2zfast.conf\n"
+
+  # Delete all of the temporary files/directories we created.
+  if not opts.no_cleanup:
+    for f in [snp_table_file,fixed_snp_tab,refflat,fixed_refflat,merge_file,refsnp_trans_file]:
+      remove_file(f);
+
+    if opts.gencode:
+      remove_file(gencode_file);
+
+    if opts.gwas_cat:
+      remove_file(gwas_cat_file);
 
 if __name__ == "__main__":
   main();

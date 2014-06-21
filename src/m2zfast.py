@@ -164,9 +164,6 @@ def printGWACatalogs(cat_db,build):
     print "-- No valid options for this build.";
 
 def getAllGWACatalogs(cat_db):
-  print "Available GWAS catalogs:"
-  print "";
-   
   table = PrettyTable(['Build','--gwas-cat','Description']);
   table.set_field_align('Build','l');
   table.set_field_align('Description','l');
