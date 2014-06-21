@@ -68,9 +68,9 @@ except:
   raise;
 
 # Program strings.
-M2ZFAST_VERSION = "1.2";
+M2ZFAST_VERSION = "1.3";
 M2ZFAST_TITLE = "+---------------------------------------------+\n"\
-                "| LocusZoom 1.2 (05/09/2013)                  |\n"\
+                "| LocusZoom 1.3 (06/20/2014)                  |\n"\
                 "| Plot regional association results           |\n"\
                 "| from GWA scans or candidate gene studies    |\n"\
                 "+---------------------------------------------+\n";
