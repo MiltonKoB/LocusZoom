@@ -300,10 +300,10 @@ def regionString(chr,start,end):
 def kill_dir(d):
   def report_error(function,path,excinfo):
     msg = None;
-    if excinfo != None:
+    if excinfo is not None:
       msg = str(excinfo[1]);
       
-    print >> sys.stderr, "Error: could not remove: %s, message was: " % (
+    print >> sys.stderr, "Error: could not remove: %s, message was: %s" % (
       path,
       msg
     );
