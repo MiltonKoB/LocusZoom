@@ -20,6 +20,7 @@ Features added:
 -- lzupdate.py script to automatically create/update a database file. This script will download data from UCSC/NCBI/GENCODE, format it appropriately, and insert it into a sqlite3 file that can be used with locuszoom. 
 -- lzupdate.py can also generate an updated GWAS catalog (use --gwas-cat)
 -- Database provided with release has been updated as of June 20, 2014
+-- Can now use different tables for gene information, e.g. --gene-table gencode or --gene-table refFlat. GENCOE is also now included in the database by default
 -- Added support for tabix indexes with EPACTS files
 -- Allow reading from STDIN instead of directly from a file (use --metal - or --epacts -). This may be useful if you have your own fast method (perhaps tabix, or something else) of selecting out the region you wish to plot. For example: tabix -h <file> 1:1-100 | locuszoom --metal - --refgene TCF7L2 ... Note that you can tabix index METAL files, but you'll need to add a chr and pos column yourself, bgzip it, and then have tabix index it. 
 -- Added drawing of multiple horizontal significance lines, use signifLine="5e-08,1e-10" for example. Can also change each line's width and color using signifLineColor="red,blue" or signifLineWidth="2,4"
