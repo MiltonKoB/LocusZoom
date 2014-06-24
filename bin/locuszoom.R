@@ -440,7 +440,7 @@ LoadGWASHits = function(file,verbose=TRUE,...) {
     }
   }
 
-  gwas = read.table(file,header=T,sep="\t",comment.char="",stringsAsFactors=F);
+  gwas = read.table(file,header=T,sep="\t",comment.char="",stringsAsFactors=F,quote="");
   names(gwas) = tolower(names(gwas));
 
   # Do we have the correct columns? 
