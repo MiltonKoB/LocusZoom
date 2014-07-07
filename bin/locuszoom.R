@@ -1507,7 +1507,9 @@ panel.bed <- function(bed_data,track_height,startbp,endbp) {
     bed_data$color = sapply(bed_data$itemRgb,function(x) { do.call(rgb,c(as.list(unlist(strsplit(x,","))),maxColorValue=255)) });
     
     is_white = bed_data$color == "#FFFFFF";
-    bed_data[is_white,]$color = "#E5E5E5";
+    if (any(is_white)) {
+      bed_data[is_white,]$color = "#E5E5E5";
+    }
   } else {
     bed_data$color = "black";
   }  
