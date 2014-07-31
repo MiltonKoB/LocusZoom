@@ -2096,7 +2096,8 @@ def main():
 
       # If they only want the plot, move/rename the pdf and delete the directory created.
       if opts.plotonly:
-        image_file = glob(os.path.join(temp_dir,"*.pdf")); 
+        image_file = glob(os.path.join(temp_dir,"*.pdf"));
+        image_file += glob(os.path.join(temp_dir,"*.svg"));
         exts = [os.path.splitext(i)[1] for i in image_file];
         if len(image_file) == 0:
           print >> sys.stderr, "Error: no image file found";
