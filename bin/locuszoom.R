@@ -1771,7 +1771,7 @@ panel.gwas <- function (
 # 
 # NB: *** passing in entire args list *** 
 #
-zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,args=NULL,...){
+zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,args=NULL,...) {
 
   refSnp <- metal$MarkerName[refidx];
 
@@ -2054,7 +2054,8 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   }
 
   pushViewport(viewport(clip="on",xscale=pvalVp$xscale,yscale=pvalVp$yscale,name='pvalsClipped'));
-  grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+
+  grid.rect(gp=gpar(col=args[['frameColor']],fill=NA,alpha=args[['frameAlpha']]));
   
   groupIds <-  sort(unique(metal$group))
   print(table(metal$group));
@@ -2228,7 +2229,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     upViewport(1); 
   }
   
-  grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+  grid.rect(gp=gpar(col=args[['frameColor']],fill=NA,alpha=args[['frameAlpha']]));
 
   if (is.null(cond_ld)) {
     pushViewport(viewport(clip="on",name='legend'));
@@ -2368,6 +2369,8 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
         clip="on")
     );
     
+    grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+    
     panel.flatbed(
       flat=refFlat,
       showPartialGenes = args[['showPartialGenes']],
@@ -2380,9 +2383,6 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     );
     
     upViewport(1);
-
-    #grid.rect(gp=gpar(col='white'));
-    grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
     
     if ( !is.null(args[['xnsmall']]) && !is.null(args[['xat']]) ) {
       grid.xaxis(at=args[['xat']], label=format(args[['xat']], nsmall=args[['xnsmall']]),
@@ -2520,7 +2520,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     ));
     
     panel.bed(bed_tracks,bed_height,args[['startBP']],args[['endBP']]);
-    grid.rect(gp=gpar(col=args[['frameColor']],alpha=args[['frameAlpha']]));
+    grid.rect(gp=gpar(col=args[['frameColor']],fill=NA,alpha=args[['frameAlpha']]));
     
     upViewport(1);
   }
@@ -3152,6 +3152,12 @@ args <- ModifyList(
   list( pdf = paste(args[['prefix']], ".pdf", sep="") ),
   args
   );
+  
+# pdf
+args <- ModifyList(
+  list( svg = paste(args[['prefix']], ".svg", sep="") ),
+  args
+  );
 
 args <- ModifyList(
   list( png = paste(args[['prefix']], ".png", sep="") ),
@@ -3728,6 +3734,18 @@ if ('pdf' %in% args[['format']]) {
     # metal_isnps = metal_isnps[,c("MarkerName","chr","pos","P.value","ref_or_cond")];
     # grid.extralog(metal_isnps,main = "Reference and Conditional SNPs");
   # }
+  
+  dev.off();
+} 
+
+if ('svg' %in% args[['format']]) {
+  svg(file=args[['svg']],width=args[['width']],height=args[['height']]);
+  
+  if ( prod(dim(metal)) == 0 ) { 
+    message ('No data to plot.'); 
+  } else {
+    zplot(metal,ld,recrate,refidx,nrugs=nrugs,args=args,postlude=args[['postlude']]);
+  }
   
   dev.off();
 } 

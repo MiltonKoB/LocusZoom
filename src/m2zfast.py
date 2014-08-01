@@ -581,6 +581,10 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
   
       if is_number(pval):     
         dec_pval = decimal.Decimal(pval);
+        
+        if dec_pval == 0 or not dec_pval.is_finite():
+          print >> sys.stderr, "Warning: marker at position %s has invalid p-value: %s, skipping.." % (marker_name,str(pval));
+          continue;
       
         if dec_pval < min_pval:
           min_snp = snp;
@@ -726,6 +730,10 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
       if is_number(pval):     
         dec_pval = decimal.Decimal(pval);
       
+        if dec_pval == 0 or not dec_pval.is_finite():
+          print >> sys.stderr, "Warning: marker at position %s has invalid p-value: %s, skipping.." % (marker_name,str(pval));
+          continue;
+
         if dec_pval < min_pval:
           min_snp = marker_name;
           min_pval = dec_pval; 
