@@ -2402,7 +2402,27 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
       fill=args[['hiColor']],
       alpha=args[['hiAlpha']]
     );
-        
+
+    if (!is.null(args[['hiStarts']]) & !is.null(args[['hiEnds']]) & !is.null(args[['hiColors']])) {
+      down = seekViewport("refFlatOuter");
+      startV = as.numeric(strsplit(args[['hiStarts']],",")[[1]]);
+      endV = as.numeric(strsplit(args[['hiEnds']],",")[[1]]);
+      hiColors = strsplit(args[['hiColors']],",")[[1]];
+
+      for (i in seq(1,length(startV))) {
+        x1 = startV[[i]];
+        x2 = endV[[i]];
+        hiCol = hiColors[[i]];
+
+        panel.hilite(
+          range=c(x1/args[['unit']],x2/args[['unit']]),
+          fill=hiCol,
+          alpha=args[['hiAlpha']]
+        );
+      }
+      
+    }
+
     upViewport(1);
   }
 
@@ -2924,7 +2944,10 @@ default.args <- list(
   hiStart=0,                            # start of hilite region
   hiEnd=0,                              # end of hilite region
   hiColor="blue",                       # hilite color
-  hiAlpha=0.1,                          # hilite alpha
+  hiAlpha=0.25,                          # hilite alpha
+  hiStarts=NULL,
+  hiEnds=NULL,
+  hiColors=NULL,
   clobber=TRUE,                         # overwrite files?
   reload=NULL,                          # .Rdata file to reload data from
   prelude=NULL,                         # code to execute after data is read but before plot is made (allows data modification)
