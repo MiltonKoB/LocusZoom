@@ -1153,8 +1153,12 @@ def getSettings():
   parser.add_option("--ld",dest="ld",help="Specify a user-defined LD file.");
   parser.add_option("--ld-vcf",dest="ld_vcf",help="Specify a VCF file from which to compute LD.");
   parser.add_option("--ld-measure",dest="ld_measure",help="Specify LD measure to use. Can be either 'rsquare' or 'dprime'. Default is rsquare.");
+  parser.add_option("--ignore-vcf-filter",action="store_true",default=False,help="Ignore FILTER column when using VCF file to calculate LD.");
   parser.add_option("--no-ld",dest="no_ld",help="Disable calculating and displaying LD information.",action="store_true");
   parser.add_option("--enable-db-annot",action="store_true",default=False,help="Enable pulling variant annotation from SQLite. This is for backwards compatibility only in 1.3, will be completely disabled in 1.4.");
+
+  # Options controlling plot output
+  parser.add_option("--svg",action="store_true",default=False,help="Also generate SVG in addition to PDF format.");
 
   # Options controlling which database tables to use
   parser.add_option("--gene-table",help="Name of gene table to use in database. Defaults to 'refFlat'. GENCODE is also supplied for some builds - use 'gencode'.",default=SQLITE_REFFLAT);
@@ -1876,14 +1880,14 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
         ld_vcf = opts.ld_vcf;
 
       tabix_region = "{0}:{1}-{2}".format(chr,start,end);
-      ld_temp = ld_from_vcf(opts.ld_measure,refsnp.pos,ld_vcf,tabix_region,conf.TABIX_PATH);
+      ld_temp = ld_from_vcf(opts.ld_measure,refsnp.pos,ld_vcf,tabix_region,conf.TABIX_PATH,opts.ignore_vcf_filter);
       if ld_temp != None:
         ld_files.append(ld_temp);
 
       if opts.condsnps:
         for cond_snp in opts.condsnps:
           print "Using user-specified VCF file to calculate LD with conditional SNP %s.." % str(cond_snp);
-          ld_temp = ld_from_vcf(opts.ld_measure,cond_snp.pos,ld_vcf,tabix_region,conf.TABIX_PATH);
+          ld_temp = ld_from_vcf(opts.ld_measure,cond_snp.pos,ld_vcf,tabix_region,conf.TABIX_PATH,opts.ignore_vcf_filter);
           if ld_temp != None:
             ld_files.append(ld_temp);
     else:
@@ -1963,6 +1967,10 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   # BED tracks file. 
   if opts.bed_tracks != None:
     args += " bedTracks=%s" % opts.bed_tracks;
+
+  # Should we also generate SVG?
+  if opts.svg:
+    args += " format=pdf,svg";
 
   print "Creating plot..";
 

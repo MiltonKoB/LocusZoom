@@ -68,7 +68,7 @@ def haplo_to_code(g):
 
   return [g0,g1];
 
-def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
+def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix",ignore_filter=False):
   # First grab the index SNP's genotypes. 
   chrom = region.split(":")[0];
   if not int(index_pos) >= 0:
@@ -153,9 +153,10 @@ def ld_rsquare_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
 #        continue;
 
       # Did it pass filters? 
-      rec_pass = rec[6];
-      if rec_pass != "PASS":
-        continue;
+      if not ignore_filter:
+        rec_pass = rec[6];
+        if rec_pass != "PASS":
+          continue;
 
       # SNP/chr/pos
       (chr,pos,snp) = rec[0:3];
@@ -205,7 +206,7 @@ def ld_from_vcf(method,*args,**kargs):
   else:
     raise Exception, "Error: only 'rsquare' and 'dprime' methods available for calculating LD from VCF file.";
 
-def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
+def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix",ignore_filter=False):
   # First grab the index SNP's genotypes. 
   chrom = region.split(":")[0];
   if not int(index_pos) >= 0:
@@ -291,9 +292,10 @@ def ld_dprime_indexsnp_vcf(index_pos,vcf_file,region,tabix_path="tabix"):
 #        continue;
 
       # Did it pass filters? 
-      rec_pass = rec[6];
-      if rec_pass != "PASS":
-        continue;
+      if not ignore_filter:
+        rec_pass = rec[6];
+        if rec_pass != "PASS":
+          continue;
 
       # SNP/chr/pos
       (chr,pos,snp) = rec[0:3];
