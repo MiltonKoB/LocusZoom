@@ -659,3 +659,9 @@ tests.append(Test(
 title = "Testing EPACTS file with tabix index"
 ));
 
+# Test for annotation column in EPACTS file
+tests.append(Test(
+"--prefix epacts_annot_test --epacts tests/data/test_epacts_with_annot_col.epacts.gz --refgene TCF7L2 --build hg19 --pop EUR --source 1000G_March2012 annotCol=ANNOT annotPch=15,16,17,18,19,4,5,7,1",
+title = "Testing custom user annotations with an EPACTS file"
+));
+

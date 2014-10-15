@@ -470,9 +470,9 @@ def is_bz2(file):
 
 # Given a metal file, this function extracts the region from the file between
 # chr/start/end.
-def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_file,delim):
+def read_metal(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_file,delim):
   region = "chr%s:%s-%s" % (str(chr),start,end);
-  output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
+  output_file = "temp_metal_%s_%s.txt" % (region.replace(":","_"),tempfile.mktemp(dir=""));
   
   con = sqlite3.connect(db_file);
   query = """
@@ -486,7 +486,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
   sptable = {};
   while 1:
     row = cur.fetchone();
-    if row != None:
+    if row is not None:
       sptable.setdefault(row[0],(int(row[1]),int(row[2])));
     else:
       break;
@@ -515,7 +515,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
   metal_header[-1] = metal_header[-1].rstrip();
 
   snp_col = None; 
-  if snp_column != None:
+  if snp_column is not None:
     if type(snp_column) == type(str()):
       snp_col = findCol(metal_header,snp_column);
     elif type(snp_column) == type(int()):
@@ -524,7 +524,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
       die("Error: marker column specified with something other than a string or integer: %s" % str(snp_column));
 
   # After all that, we still couldn't find the snp column. Fail..
-  if snp_col == None:
+  if snp_col is None:
     msg = "Error: could not locate SNP column in data. You may need to specify "\
           "it using --markercol <snp column name>. Your delimiter should also "\
           "be specified if it is not a tab by using --delim.";
@@ -532,7 +532,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
 
   # Find p-value column.
   pval_col = None;
-  if pval_column != None:
+  if pval_column is not None:
     if type(pval_column) == type(str()):
       pval_col = findCol(metal_header,pval_column);
     elif type(pval_column) == type(int()):
@@ -541,7 +541,7 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
       die("Error: pval column specified with something other than a string or integer: %s" % str(pval_column)); 
 
   # We still couldn't find the p-value column. FAIL!
-  if pval_col == None:
+  if pval_col is None:
     die("Error: could not locate p-value column in data, column name I'm looking for is: %s. Is your delimiter correct?" % (pval_column));
   
   out = open(output_file,"w");
@@ -611,14 +611,14 @@ def readMETAL(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_fi
                           "selecting the appropriate build on the website.");
     print >> sys.stderr, "";
 
-  return (found_in_region,output_file,min_snp);
+  return found_in_region, output_file, min_snp
 
 # Given an EPACTS file, this function extracts the region from the file between
 # chr/start/end.
-def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_transform):
+def read_epacts(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_transform):
   conf = getConf();
   region = "%s:%s-%s" % (str(chr),start,end);
-  output_file = "temp_pocull_%s_%s" % (region,tempfile.mktemp(dir=""));
+  output_file = "temp_epacts_%s_%s.txt" % (region.replace(":","_"),tempfile.mktemp(dir=""));
 
   chr = int(chr);
   start = int(start);
@@ -676,21 +676,24 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
 
   # Find chr/begin/end columns. 
   try:
-    chr_col = epacts_header.index(chr_col);
-    begin_col = epacts_header.index(beg_col);
-    end_col = epacts_header.index(end_col);
+    i_chr_col = epacts_header.index(chr_col);
+    i_begin_col = epacts_header.index(beg_col);
+    i_end_col = epacts_header.index(end_col);
   except:
     raise IOError, "Error: could not find chrom/begin/end columns in EPACTS file. Try specifying --epacts-chr-col, --epacts-beg-col, --epacts-end-col.";
 
   # Find p-value column.
   try:
-    pval_col = epacts_header.index(pval_col);
+    i_pval_col = epacts_header.index(pval_col);
   except:
     raise IOError, "Error: could not find p-value column in EPACTS file. Try specifying with --epacts-pval-col.";
-  
+
+  cols_not_needed = [chr_col,beg_col,end_col,pval_col] + "MARKER_ID NS AC CALLRATE GENOCNT BETA SEBETA STAT MAF SCORE N.CASE N.CTRL AF.CASE AF.CTRL".split()
+  extra_cols = filter(lambda x: x not in cols_not_needed,epacts_header)
+  extra_ind = [epacts_header.index(x) for x in extra_cols]
   out = open(output_file,"w");
-  print >> out, "\t".join(['chr','pos','MarkerName','P-value']);
-  format_str = "\t".join(['%i','%i','%s','%s']);
+  print >> out, "\t".join(['chr','pos','MarkerName','P-value'] + extra_cols);
+  format_str = "\t".join(['%s','%i','%s','%s'] + ["%s" for _ in xrange(len(extra_cols))]);
   
   # Arbitrary arithmetic precision  
   decimal.getcontext().prec = 8;
@@ -707,12 +710,12 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
     e = line.split("\t");
     e[-1] = e[-1].rstrip();
 
-    marker_name = "chr%s:%s" % (e[chr_col],e[begin_col]);
+    marker_name = "chr%s:%s" % (e[i_chr_col],e[i_begin_col]);
 
     try:
-      file_chrom = int(e[chr_col]);
-      file_begin = int(e[begin_col]);
-      file_end = int(e[end_col]);
+      file_chrom = int(e[i_chr_col]);
+      file_begin = int(e[i_begin_col]);
+      file_end = int(e[i_end_col]);
     except:
       print >> sys.stderr, "Warning: skipping marker %s - could not convert chr/begin/end to integers.." % marker_name;
       continue;
@@ -725,7 +728,7 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
       # Did we find a SNP in this region at all? 
       found_in_region = True;
       
-      pval = e[pval_col];
+      pval = e[i_pval_col];
   
       if is_number(pval):     
         dec_pval = decimal.Decimal(pval);
@@ -740,8 +743,9 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
           
         if not no_transform:
           pval = str(-1*dec_pval.log10());
-        
-        print >> out, format_str % (file_chrom,file_begin,marker_name,pval);
+
+        out_values = tuple([file_chrom,file_begin,marker_name,pval] + [e[x] for x in extra_ind])
+        print >> out, format_str % out_values;
       else:
         print >> sys.stderr, "Warning: marker at position %s has invalid p-value: %s, skipping.." % (marker_name,str(pval));
 
@@ -751,7 +755,7 @@ def readEPACTS(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tra
   f.close();
   out.close();
 
-  return (found_in_region,output_file,min_snp);
+  return found_in_region, output_file, min_snp
 
 # Runs the R script which actually generates the plot. 
 def runM2Z(metal,metal2zoom_path,ld_files,refsnp,chr,start,end,no_snp_name,verbose,opts,args=""):
@@ -1651,7 +1655,7 @@ def computeLD(snp,chr,start,end,build,pop,source,cache_file,fugue_cleanup,verbos
   try:
     ld_success = ld_finder.compute(snp.chrpos,chr,start,end);
     if ld_success:
-      ld_filename = "templd_" + snp.snp + "_" + time.strftime("%y%m%d",time.localtime()) + "-" + time.strftime("%H%M%S",time.localtime()) + ".txt";
+      ld_filename = "templd_" + snp.snp.replace(":","_") + "_" + time.strftime("%y%m%d",time.localtime()) + "-" + time.strftime("%H%M%S",time.localtime()) + ".txt";
     
       if os.path.isfile(ld_filename):
         print >> sys.stderr, "Warning: LD file already exists for some reason: %s" % ld_filename;
@@ -1815,9 +1819,9 @@ def runAll(input_file,input_type,refsnp,chr,start,end,opts,args):
   print "Extracting region of interest (%s) from input file.." % regionString(chr,start,end);
 
   if input_type == 'metal':
-    (bPocull,metal_temp,min_snp) = readMETAL(input_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
+    (bPocull,metal_temp,min_snp) = read_metal(input_file,opts.snpcol,opts.pvalcol,opts.no_trans,chr,start,end,opts.sqlite_db_file,delim);
   elif input_type == 'epacts':
-    (bPocull,metal_temp,min_snp) = readEPACTS(input_file,chr,start,end,opts.epacts_chrom_col,opts.epacts_beg_col,opts.epacts_end_col,opts.epacts_pval_col,opts.no_trans);
+    (bPocull,metal_temp,min_snp) = read_epacts(input_file,chr,start,end,opts.epacts_chrom_col,opts.epacts_beg_col,opts.epacts_end_col,opts.epacts_pval_col,opts.no_trans);
 
   ld_temp = None;
   

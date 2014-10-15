@@ -1,5 +1,5 @@
 tests.append(Test(
-"--prefix custom_annot_test --metal tests/data/test_annot_col.txt --refgene TCF7L2 --build hg19 --pop EUR --source 1000G_March2012 --markercol SNPID --pvalcol PVAL annotCol=annotation annotPch=15,16,17,18,19 annotOrder=stop,non_syn,intron,syn",
-title = "Testing custom user annotations"
+"--prefix epacts_annot_test --epacts tests/data/test_epacts_with_annot_col.epacts.gz --refgene TCF7L2 --build hg19 --pop EUR --source 1000G_March2012 annotCol=ANNOT annotPch=15,16,17,18,19,4,5,7,1",
+title = "Testing custom user annotations with an EPACTS file"
 ));
 
