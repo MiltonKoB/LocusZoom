@@ -2085,7 +2085,9 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
         plot_fill = args[['ldColors']][gmetal$group];
       }
 
-      grid.points(x=gmetal$pos,y=transformation(gmetal$P.value),
+      grid.points(
+        x=gmetal$pos,
+        y=transformation(gmetal$P.value),
         pch=gmetal$pch,
         gp=gpar(
           cex=dotSizes[idx], 
@@ -3017,6 +3019,9 @@ if ( is.null(args[['reload']]) ) {
       pval_col = char2Rname(args[['pvalCol']]);
       col_classes[[pval_col]] = "numeric";
       
+      t_color_col = char2Rname(args[['colorCol']])
+      col_classes[[t_color_col]] = "character"
+
       metal <- read.file(args[['metal']],sep="\t",colClasses=col_classes,comment.char="");
     } else {
       stop(paste('No such file: ', args[['metal']]));
