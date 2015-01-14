@@ -48,6 +48,14 @@ my_browser = function() {
 # function definitions
 ################################################################################################
 
+parse_expression = function(x) {
+  expr = x
+  
+  try({expr = parse(text=x)},silent=T)
+  
+  return(expr)
+}
+
 ################################################################################
 #
 # takes string and converts '' and 'null' (case insensitive) to NULL, else unchanged.
@@ -1996,7 +2004,7 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   
   if ((titlev != '') && (!is.null(titlev))) {
     grid.text(
-      args[['title']],
+      parse_expression(args[['title']]),
       gp = gpar(
         cex=args[['titleCex']],
         col=args[['titleColor']],

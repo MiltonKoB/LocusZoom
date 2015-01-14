@@ -217,10 +217,11 @@ class TestSuite():
       log.close();
 
 class Test():
-  def __init__(self,cmd_string,out_file=None,title="",timeout=-1,should_fail=False,delay=None):
+  def __init__(self,cmd_string,out_file=None,title="",timeout=-1,should_fail=False,delay=None,plot_title=None):
     # Set before execution:
     self.id = None; 
     self.title = title;
+    self.plot_title = plot_title;
     self.bin = None;
     self.cmd = cmd_string;
     self.required_files = [];
@@ -273,8 +274,13 @@ class Test():
     else:
       raise ValueError, "Bin not specified.";
 
-    # Was there a title? 
-    if self.title != "":
+    # Was there a title?
+    if self.plot_title is not None:
+      if '"' in self.plot_title:
+        run_cmd += " title=%s" % str(self.plot_title);
+      else:
+        run_cmd += " title=\"%s\"" % str(self.plot_title);
+    else:
       run_cmd += " title=\"%s\"" % str(self.title);
 
     print "[%i] %s -- %s" % (self.id,self.title,run_cmd);

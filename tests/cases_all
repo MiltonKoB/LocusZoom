@@ -665,3 +665,9 @@ tests.append(Test(
 title = "Testing custom user annotations with an EPACTS file"
 ));
 
+# Test for new title format that allows for italics and other plotmath annotation
+tests.append(Test(
+"--prefix title_expr_test --epacts tests/data/test_epacts_with_annot_col.epacts.gz --refgene TCF7L2 --build hg19 --pop EUR --source 1000G_March2012 annotCol=ANNOT annotPch=15,16,17,18,19,4,5,7,1",
+title="Testing complicated title expressions",
+plot_title="\"paste('New title format ',italic(TCF7L2),~ phantom() - phantom(' '),'rs7903146')\""
+));
