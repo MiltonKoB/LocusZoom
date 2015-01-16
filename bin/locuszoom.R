@@ -1811,8 +1811,11 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   }
 
   titlev = args[['title']];
-  bTitle = (titlev != '') & (!is.null(titlev));
-  title_lines = ifelse(bTitle,3,0);
+  extitle = args[['expr_title']];
+
+  b_title = (titlev != '') & (!is.null(titlev));
+  b_expr_title = (extitle != '') & (!is.null(extitle));
+  title_lines = ifelse(b_title | b_expr_title,3,0);
 
   grid.newpage();
   
@@ -2002,9 +2005,18 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
   
   pushViewport(titleVp);
   
-  if ((titlev != '') && (!is.null(titlev))) {
+  if (b_title) {
     grid.text(
-      parse_expression(args[['title']]),
+      args[['title']],
+      gp = gpar(
+        cex=args[['titleCex']],
+        col=args[['titleColor']],
+        fontface=args[['titleFontFace']]
+      )
+    );
+  } else if (b_expr_title) {
+    grid.text(
+      parse_expression(args[['expr_title']]),
       gp = gpar(
         cex=args[['titleCex']],
         col=args[['titleColor']],
@@ -2883,6 +2895,7 @@ default.args <- list(
   cond_snps = NULL,                     # list of SNPs that remain significant after conditional analysis
   cond_pos = NULL,                      # list of conditional SNPs in chr:pos form
   title = "",                           # title for plot
+  expr_title = "",                      # give title as expression instead of plain text, see plotmath for syntax
   titleColor = "black",                 # color for title 
   titleFontFace = "plain",              # font face for title, use "italic" for genes
   titleCex = 2,                         # size change for title
