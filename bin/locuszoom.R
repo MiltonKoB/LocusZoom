@@ -518,7 +518,7 @@ AdjustModesOfArgs <- function(args) {
     args <- sublapply(args,
         c('experimental','clobber','recombOver','recombFill','pquery','drawMarkerNames',
           'showRecomb','showAnnot','showRefsnpAnnot','bigDiamond','showPartialGenes','shiftGeneNames',
-          'clean', 'dryRun','legendMissing'),
+          'clean', 'dryRun','legendMissing','hiRequiredGene'),
         as.logical);
 
     args <- sublapply( args,
@@ -804,6 +804,10 @@ textWidth <- function(text="",gp=gpar()) {
   return ( grobWidth(textGrob(text,gp=gp)) );
 }
 
+textHeight <- function(text="",gp=gpar()) {
+  return ( grobHeight(textGrob(text,gp=gp)) );
+}
+
 #############################################################
 #
 # generate text with arrow (or just compute width of same)
@@ -814,6 +818,8 @@ arrowText <- function(text,x=unit(.5,'npc'), y=unit(.5,'npc'), direction='+',nam
 
   tWidth <- textWidth(text,gp)
   aWidth <- textWidth('xx,',gp)
+
+  tHeight <- textHeight(text,gp)
 
   if (widthOnly) { 
     return( convertWidth(tWidth + aWidth),unitTo='inches',valueOnly=TRUE ) 
@@ -856,6 +862,7 @@ arrowText <- function(text,x=unit(.5,'npc'), y=unit(.5,'npc'), direction='+',nam
   attr(result,'width') <- convertX(tWidth + aWidth,'inches')
   attr(result,'twidth') <- convertX(grobWidth(tg),'inches')
   attr(result,'awidth') <- convertX(grobWidth(ag),'inches')
+  attr(result,'theight') <- tHeight
   attr(result,'cWidth') <- cWidth
   attr(result,'tWidth') <- tWidth
   attr(result,'aWidth') <- aWidth
@@ -1276,7 +1283,9 @@ panel.flatbed <- function (
     }
   }
 
-  grid.segments(x0 = multiplier + df0$start, x1 = df0$stop, 
+  grid.segments(
+    x0 = multiplier + df0$start, 
+    x1 = df0$stop, 
     y0 = yPos(df0$idnum),
     y1 = yPos(df0$idnum),
     default.units = "native", 
@@ -1306,7 +1315,8 @@ panel.flatbed <- function (
   }
 
   for (i in 1:dim(df0uniq)[1]) {
-    at <- arrowText(df0uniq$name[i],
+    at <- arrowText(
+      df0uniq$name[i],
       x = unit((df0uniq$start[i] + df0uniq$stop[i])/2, 'npc'),
       y = yPos(df0uniq$idnum[i], text=TRUE),
       direction = df0uniq$strand[i],
@@ -1315,12 +1325,61 @@ panel.flatbed <- function (
     );
     grid.draw(at);
   }
+
+  add_npc = function(...) {
+    v = sapply(list(...),function(x) as.numeric(convertUnit(x,"npc")))
+    return(unit(sum(v),"npc"))
+  }
+
+  midpoint_npc = function(x,y) {
+    x = as.numeric(x)
+    y = as.numeric(y)
+    return(unit((x + y)/2,"npc"))
+  }
+
+  # This code highlights the required gene with a rectangle around it
+  if (args[['hiRequiredGene']] & is.character(args[['requiredGene']])) {
+    requiredGeneMatch = df0uniq$name == args[['requiredGene']];
+    if (any(requiredGeneMatch)) {
+      requiredGeneIdx <- min(which(requiredGeneMatch) )
+      requiredGeneIdnum <- df0uniq$idnum[requiredGeneIdx]
+
+      # Need the arrow grob to know how wide it is. 
+      at <- arrowText(
+        df0uniq$name[requiredGeneIdx],
+        x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
+        y = yPos(df0uniq$idnum[requiredGeneIdx], text=TRUE),
+        direction = df0uniq$strand[requiredGeneIdx],
+        check.overlap = TRUE, 
+        gp = gpar(cex = cex, fontface='italic',col=textcol,lwd=1.5)
+      );
+
+      npc_width_gene_text = convertUnit(attr(at,"width"),"npc")
+      npc_width_gene_body = unit(diff(as.numeric(df0uniq[requiredGeneIdx,c("left","right")])),"npc")
+      
+      total_height = unit(3.5 * height * increment,"npc") + attr(at,"theight")
+
+      y_center = midpoint_npc(
+        yPos(df0uniq$idnum[requiredGeneIdx],text=TRUE),
+        yPos(df0uniq$idnum[requiredGeneIdx],text=FALSE)
+      )
+
+      grid.rect(
+        x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
+        y = y_center,
+        width = 1.025 * max(npc_width_gene_text,npc_width_gene_body),
+        height = total_height,
+        gp = gpar(col=args[['hiRequiredGeneColor']])
+      )
+
+    }
+  }
   
-  # sink(NULL);
-  # sink(NULL,type="message");
-  # sink(NULL);
-  # sink(NULL,type="message");
-  # browser();
+  #sink(NULL);
+  #sink(NULL,type="message");
+  #sink(NULL);
+  #sink(NULL,type="message");
+  #browser();
 }
 
 panel.finemap <- function (
@@ -2877,6 +2936,8 @@ default.args <- list(
   axisTextSize = 1,                     # sclaing factor for axis labels
   axisTextColor = "gray30",             # color of axis labels
   requiredGene = NULL,                  # gene name (string)
+  hiRequiredGene = FALSE,               # should we highlight the required gene?
+  hiRequiredGeneColor = "red",          # color for required gene highlight box 
   refsnp = NULL,                        # snp name (string)
   refsnpName = NULL,                    # name given to refsnp on plot (usually same as refsnp)
   drawMarkerNames = TRUE,               # draw the rs# SNP names above them?
