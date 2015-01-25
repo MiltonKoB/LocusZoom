@@ -1012,6 +1012,11 @@ def convertFlank(flank):
       iFlank = float(digits)*1000000;
 
     iFlank = int(round(iFlank));
+  else:
+    try:
+      iFlank = int(flank)
+    except:
+      pass
 
   return iFlank;
 
