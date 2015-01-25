@@ -518,7 +518,7 @@ AdjustModesOfArgs <- function(args) {
     args <- sublapply(args,
         c('experimental','clobber','recombOver','recombFill','pquery','drawMarkerNames',
           'showRecomb','showAnnot','showRefsnpAnnot','bigDiamond','showPartialGenes','shiftGeneNames',
-          'clean', 'dryRun','legendMissing','hiRequiredGene'),
+          'clean', 'dryRun','legendMissing','hiRequiredGene','refsnpShadow'),
         as.logical);
 
     args <- sublapply( args,
@@ -736,7 +736,8 @@ flatten.bed <- function(x,multiplier=.001) {
     invisible(df);
 }
 
-grid.refsnp <- function(name,pos,pval,draw.name=TRUE,label=NULL,color=NULL) {
+# TODO: add in shadow support for denote marker feature (label if block below) and test
+grid.refsnp <- function(name,pos,pval,draw.name=TRUE,label=NULL,color=NULL,shadow=FALSE) {
 
   if (draw.name) {
     # Figure out text height. 
@@ -768,7 +769,10 @@ grid.refsnp <- function(name,pos,pval,draw.name=TRUE,label=NULL,color=NULL) {
       );
       
     } else {
-      grid.text(
+      if (require("gridExtra") & shadow) { grob_func = stextGrob }
+      else { grob_func = textGrob }
+
+      refsnp_text = grob_func(
         as.character(name),
         x=unit(pos,"native"), 
         y=unit(pval,'native') + unit(1.15,'lines'), 
@@ -779,6 +783,8 @@ grid.refsnp <- function(name,pos,pval,draw.name=TRUE,label=NULL,color=NULL) {
           alpha=args[['refsnpTextAlpha']]
         )
       );
+
+      grid.draw(refsnp_text);
     }
   }
   
@@ -2226,10 +2232,10 @@ zplot <- function(metal,ld=NULL,recrate=NULL,refidx=NULL,nrugs=0,postlude=NULL,a
     if (! is.null(refidx)) {
       if (!is.null(args[['refsnpName']])) {
         # User-provided refsnp label. 
-        grid.refsnp(args[['refsnpName']],metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
+        grid.refsnp(args[['refsnpName']],metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']],shadow=args[['refsnpShadow']]);
       } else{
         # Use the actual SNP name. 
-        grid.refsnp(refSnp,metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']]);
+        grid.refsnp(refSnp,metal$pos[refidx],metal$P.value[refidx],args[['drawMarkerNames']],shadow=args[['refsnpShadow']]);
       }
     }
     
@@ -2940,6 +2946,7 @@ default.args <- list(
   hiRequiredGeneColor = "red",          # color for required gene highlight box 
   refsnp = NULL,                        # snp name (string)
   refsnpName = NULL,                    # name given to refsnp on plot (usually same as refsnp)
+  refsnpShadow = FALSE,                 # put a shadow around the refsnp?
   drawMarkerNames = TRUE,               # draw the rs# SNP names above them?
   denoteMarkersFile = NULL,              # file specifying marker names to highlight (along with brief label and/or color)
   refsnpTextColor = "black",            # color for ref snp label
