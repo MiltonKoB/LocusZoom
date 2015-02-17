@@ -495,55 +495,59 @@ MatchIfNull <- function(args,toupdate,updatewith) {
 # internal use.
 #
 AdjustModesOfArgs <- function(args) {
-    args <- sublapply(args,
-        c('legendAlpha', 'width','height',
-          'frameAlpha','hiAlpha','rugAlpha',
-          'refsnpLineAlpha', 'recombFillAlpha','recombLineAlpha', 'refsnpTextAlpha', 'refsnpLineWidth',
-          'ymin','ymax','legendSize','refsnpTextSize','axisSize','axisTextSize','geneFontSize','smallDot',
-          'largeDot','refDot','ldThresh','rightMarginLines'),
-        as.numeric);
+  args <- sublapply(args,
+    c('legendAlpha', 'width','height',
+      'frameAlpha','hiAlpha','rugAlpha',
+      'refsnpLineAlpha', 'recombFillAlpha','recombLineAlpha', 'refsnpTextAlpha', 'refsnpLineWidth',
+      'ymin','ymax','legendSize','refsnpTextSize','axisSize','axisTextSize','geneFontSize','smallDot',
+      'largeDot','refDot','ldThresh','rightMarginLines'),
+    as.numeric);
 
-    args <- sublapply(args,
-        c('metal','recomb','ld','refSnpPosFile','snpsetFile','annot','refFlat','denoteMarkersFile'),
-        as.filename);
+  args <- sublapply(args,
+    c('metal','recomb','ld','refSnpPosFile','snpsetFile','annot','refFlat','denoteMarkersFile'),
+    as.filename);
 
-    args <- sublapply(args,
-        c('chr','unit','xnsmall','fmrows','gwrows','condRefsnpPch'),
-        as.integer);
+  args <- sublapply(args,
+    c('chr','unit','xnsmall','fmrows','gwrows','condRefsnpPch'),
+    as.integer);
 
-    args <- sublapply(args,
-        c('condLdLow'),
-        as.character);
-    
-    args <- sublapply(args,
-        c('experimental','clobber','recombOver','recombFill','pquery','drawMarkerNames',
-          'showRecomb','showAnnot','showRefsnpAnnot','bigDiamond','showPartialGenes','shiftGeneNames',
-          'clean', 'dryRun','legendMissing','hiRequiredGene','refsnpShadow'),
-        as.logical);
+  args <- sublapply(args,
+    c('condLdLow'),
+    as.character);
+  
+  args <- sublapply(args,
+    c('experimental','clobber','recombOver','recombFill','pquery','drawMarkerNames',
+      'showRecomb','showAnnot','showRefsnpAnnot','bigDiamond','showPartialGenes','shiftGeneNames',
+      'clean', 'dryRun','legendMissing','hiRequiredGene','refsnpShadow'),
+    as.logical);
 
+  args <- sublapply( args,
+    c('ldCuts','xat','yat','annotPch','condPch','signifLine','signifLineWidth'),
+    function(x) { as.numeric(unlist(strsplit(x,","))) } );
+  
+  args <- sublapply( args,
+    c('condLdColors','signifLineColor','requiredGene'),
+    function(x) { 
+      x = gsub("\\s+","",x)
+      as.character(unlist(strsplit(x,",")))
+    } 
+  );
+
+  if (!is.null(args[['weightRange']])) {
     args <- sublapply( args,
-        c('ldCuts','xat','yat','annotPch','condPch','signifLine','signifLineWidth'),
-        function(x) { as.numeric(unlist(strsplit(x,","))) } );
-    
-    args <- sublapply( args,
-        c('condLdColors','signifLineColor'),
-        function(x) { as.character(unlist(strsplit(x,","))) } );
+      c('weightRange'),
+      function(x) { as.numeric(unlist(strsplit(x,","))) } );
+  }
 
-    if (!is.null(args[['weightRange']])) {
-      args <- sublapply( args,
-        c('weightRange'),
-        function(x) { as.numeric(unlist(strsplit(x,","))) } );
-    }
+  args <- sublapply( args,
+    c('rfrows','signifLineType'),
+    function(x) { as.integer(unlist(strsplit(x,","))) } );
 
-    args <- sublapply( args,
-        c('rfrows','signifLineType'),
-        function(x) { as.integer(unlist(strsplit(x,","))) } );
+  args <- sublapply( args,
+    c('ldColors', 'format', 'annotOrder','cond_ld'),
+    function(x) { unlist(strsplit(x,",")) } );
 
-    args <- sublapply( args,
-        c('ldColors', 'format', 'annotOrder','cond_ld'),
-        function(x) { unlist(strsplit(x,",")) } );
-
-    return(args);
+  return(args);
 }
 
 #############################################################
@@ -1170,10 +1174,57 @@ panel.flatbed <- function (
   df0$new <- c(1,diff(df0$idnum))  # identify new (1) vs. repeated (0)
   df0 <- df0[order(df0$idnum),]    # put back into original order
   df0uniq <- df0[df0$new == 1,]
+  
+	# Helper function. For each item, return the indexes for each 
+	# match in the target set. Returns only those indexes that match overall, 
+	# not an exact set of matches per item. 
+	match_each = function(items,target) { 
+		unique(unlist(sapply(items,function(x) { which(target == x) })))
+	}	
+	
+  # If we have a required gene, or isoform, let's make sure
+  # they are laid out first.
+  reqGene = args[['requiredGene']]
+	reqIDList = NULL
+  if (!is.null(reqGene)) {
+    req_rows = NULL
+    
+		# Some normalization of ENSEMBL IDs
+		reqGene = gsub("\\.\\d+$","",reqGene)
+		df0uniq$nmName = gsub("\\.\\d+$","",df0uniq$nmName)
+		
+    # Try matching in the nmName column first, it could be an isoform. 
+    iso_matches = match_each(reqGene,df0uniq$nmName);
+    if (length(iso_matches) > 0) {
+			reqIDList = df0uniq$idnum[iso_matches]
+      iso_gene = unique(df0uniq[iso_matches,]$name)
+      gene_matches = seq(dim(df0uniq)[1])[df0uniq$name %in% iso_gene]
 
+      all_matches = union(iso_matches,gene_matches)
+      req_rows = c(req_rows,all_matches)
+    } else {		
+			# See if any of them were also matching genes. 
+			# Remember that name is still just gene names at this point. Isoform names are added later. 
+			gene_matches = match_each(reqGene,df0uniq$name)
+			if (length(gene_matches) > 0) {
+				reqIDList = df0uniq$idnum[gene_matches]
+				req_rows = gene_matches
+			}
+		}
+
+		req_rows = unique(req_rows)
+		
+    if (!is.null(req_rows)) {
+      other_rows = setdiff(seq(dim(df0uniq)[1]),req_rows)
+			
+      # Reorder to have the required gene/isoform rows first, and then the rest. 
+      df0uniq = df0uniq[c(req_rows,other_rows),]
+    }
+
+  }
+		
   # determine the row to use
   maxIdnum <- max(c(0,df$idnum))
-  rowUse <- rep(-Inf,1+maxIdnum)
   id2row <- rep(0,1+maxIdnum)      # keep track of locations for each gene
   
   # if we're showing isoforms, change the names
@@ -1189,9 +1240,10 @@ panel.flatbed <- function (
     a <- current.viewport()$xscale[1]
     return( (x-a) / w )
   }
-
+  
+	df0uniq$rowToUse = -Inf
+  rowIntervals = lapply(seq(1+maxIdnum),function(x) { list(left=NULL,right=NULL) } )
   for (i in 1:dim(df0uniq)[1]) {
-    cat(paste(i,": ",df0uniq$name[i],"\n"));
     leftGraphic <- native2npc(min(df$start[df$idnum == df0uniq$idnum[i]]))
     rightGraphic <- native2npc(max(df$stop[df$idnum == df0uniq$idnum[i]]))
     centerGraphic<- mean(c(leftGraphic,rightGraphic))
@@ -1226,52 +1278,58 @@ panel.flatbed <- function (
     df0uniq$left[i] <- left
     df0uniq$right[i] <- right
 
-    rowToUse <- min(which(rowUse < left))
-    if ( showPartialGenes || (left >= 0 && right <= 1) ) {
-      id2row[df0uniq$idnum[i]] <- rowToUse
-      rowUse[rowToUse] <- right
-    } else {
-      id2row[df0uniq$idnum[i]] <- -2   # clipping will hide this
+    if (!showPartialGenes & (left < 0 | right > 1)) {
+      df0uniq[i,"rowToUse"] = -2;
+      next;
+    }
+    
+		# Check each row to see if this gene can fit. 
+    # This would be *much* faster with IRanges, but we can't require the user
+    # to install it, unfortunately. So this slow for loop will have to do. 
+		# If there's ever a LZ R package, then we could replace this easily. 
+    for (irow in seq(rowIntervals)) {
+      intervals = rowIntervals[[irow]]
+      
+      done = FALSE
+      if (is.null(intervals$left)) {
+        # This row is completely empty. We can use it. 
+        intervals$left = left
+        intervals$right = right
+        df0uniq[i,"rowToUse"] = irow
+        
+        done = TRUE
+      } else {
+        if (!any((intervals$left < right) & (intervals$right > left))) {
+          # This interval doesn't overlap anything in the current row. 
+          intervals$left = c(intervals$left,left)
+          intervals$right = c(intervals$right,right)
+          df0uniq[i,"rowToUse"] = irow
+          
+          done = TRUE
+        }
+      }
+      
+      rowIntervals[[irow]] = intervals
+      
+      if (done) { break; }
     }
   }
+	    
+  id2row = df0uniq[order(df0uniq$idnum),]$rowToUse
 
-  requestedRows <- rows;
-  optRows <- max(c(0,which(rowUse > 0)));
+  requestedRows = rows;
+  optRows = max(df0uniq$rowToUse)
   if (computeOptimalRows) { return (optRows) }
 
-  save(df,flat,df0,df1,df2,df0uniq,id2row,file="debug.Rdata");
+  save(df,flat,df0,df1,df2,df0uniq,id2row,rowIntervals,file="debug.Rdata");
 
   rows <- min(requestedRows,optRows);
-
-  if (is.character(args[['requiredGene']]) ) {
-    requiredGeneMatch = df0uniq$name == args[['requiredGene']];
-    # Protection from case where requiredGene isn't in the list of genes to plot in the region. 
-    # Sometimes happens too if someone requests to show isoforms (the gene names won't match since 
-    # the name is now a combination of both gene + isoform ID.)
-    if (any(requiredGeneMatch)) {
-      requiredGeneIdx <- min(which(requiredGeneMatch) )
-      requiredGeneIdnum <- df0uniq$idnum[requiredGeneIdx]
-          
-      if (id2row[requiredGeneIdnum] > rows) {
-        for (id in which(id2row == 1)){
-          if (df0uniq$left[id] < df0uniq$right[requiredGeneIdx] &&
-              df0uniq$right[id] > df0uniq$left[requiredGeneIdx] ) {
-            # If the required gene overlaps with a gene in the first row, push the overlapping
-            # gene out (rows + 2, where rows is the max # of rows). 
-            id2row[id] = rows+2
-          }
-        }
-        # Now set the required gene to the first row. 
-        id2row[requiredGeneIdnum] <- 1
-      }
-    }
-  }
 
   if (optRows > requestedRows && as.logical(args[['warnMissingGenes']])) {
     omitIdx <- which(id2row > rows)
     assign("omittedGenes",as.character(df0uniq$name[omitIdx]),globalenv())
     numberOfMissingGenes <- length(omittedGenes);
-    message <- paste(numberOfMissingGenes," gene",if(numberOfMissingGenes > 1) "s" else "", "\nomitted",sep="")
+    message <- paste(numberOfMissingGenes,if(args[['showIso']]) " iso" else " gene",if(numberOfMissingGenes > 1) "s" else "", "\nomitted",sep="")
     pushViewport(viewport(clip='off'));
     grid.text(message ,x=unit(1,'npc') + unit(1,'lines'), y=.5, just=c('left','center'),
       gp=gpar(cex=args[['axisTextSize']], col=args[['axisTextColor']], alpha=args[['frameAlpha']])
@@ -1342,43 +1400,41 @@ panel.flatbed <- function (
     y = as.numeric(y)
     return(unit((x + y)/2,"npc"))
   }
-
+	
   # This code highlights the required gene with a rectangle around it
-  if (args[['hiRequiredGene']] & is.character(args[['requiredGene']])) {
-    requiredGeneMatch = df0uniq$name == args[['requiredGene']];
-    if (any(requiredGeneMatch)) {
-      requiredGeneIdx <- min(which(requiredGeneMatch) )
-      requiredGeneIdnum <- df0uniq$idnum[requiredGeneIdx]
+  if (args[['hiRequiredGene']] & !is.null(args[['requiredGene']]) & length(reqIDList) > 0) {
+		for (requiredGeneIdnum in reqIDList) {
+			requiredGeneIdx = which(df0uniq$idnum == requiredGeneIdnum)
+			
+			# Need the arrow grob to know how wide it is. 
+			at <- arrowText(
+				df0uniq$name[requiredGeneIdx],
+				x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
+				y = yPos(df0uniq$idnum[requiredGeneIdx], text=TRUE),
+				direction = df0uniq$strand[requiredGeneIdx],
+				check.overlap = TRUE, 
+				gp = gpar(cex = cex, fontface='italic',col=textcol,lwd=1.5)
+			);
 
-      # Need the arrow grob to know how wide it is. 
-      at <- arrowText(
-        df0uniq$name[requiredGeneIdx],
-        x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
-        y = yPos(df0uniq$idnum[requiredGeneIdx], text=TRUE),
-        direction = df0uniq$strand[requiredGeneIdx],
-        check.overlap = TRUE, 
-        gp = gpar(cex = cex, fontface='italic',col=textcol,lwd=1.5)
-      );
+			npc_width_gene_text = convertUnit(attr(at,"width"),"npc")
+			npc_width_gene_body = unit(diff(as.numeric(df0uniq[requiredGeneIdx,c("left","right")])),"npc")
+			
+			total_height = unit(3.5 * height * increment,"npc") + attr(at,"theight")
 
-      npc_width_gene_text = convertUnit(attr(at,"width"),"npc")
-      npc_width_gene_body = unit(diff(as.numeric(df0uniq[requiredGeneIdx,c("left","right")])),"npc")
-      
-      total_height = unit(3.5 * height * increment,"npc") + attr(at,"theight")
+			y_center = midpoint_npc(
+				yPos(df0uniq$idnum[requiredGeneIdx],text=TRUE),
+				yPos(df0uniq$idnum[requiredGeneIdx],text=FALSE)
+			)
 
-      y_center = midpoint_npc(
-        yPos(df0uniq$idnum[requiredGeneIdx],text=TRUE),
-        yPos(df0uniq$idnum[requiredGeneIdx],text=FALSE)
-      )
+			grid.rect(
+				x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
+				y = y_center,
+				width = 1.025 * max(npc_width_gene_text,npc_width_gene_body),
+				height = total_height,
+				gp = gpar(col=args[['hiRequiredGeneColor']])
+			)
 
-      grid.rect(
-        x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
-        y = y_center,
-        width = 1.025 * max(npc_width_gene_text,npc_width_gene_body),
-        height = total_height,
-        gp = gpar(col=args[['hiRequiredGeneColor']])
-      )
-
-    }
+		}
   }
   
   #sink(NULL);
@@ -2941,7 +2997,7 @@ default.args <- list(
   axisSize = 1,                         # sclaing factor for axes
   axisTextSize = 1,                     # sclaing factor for axis labels
   axisTextColor = "gray30",             # color of axis labels
-  requiredGene = NULL,                  # gene name (string)
+  requiredGene = NULL,                  # required gene for gene track; specify as list of genes "GENE1,GENE2,GENE3"
   hiRequiredGene = FALSE,               # should we highlight the required gene?
   hiRequiredGeneColor = "red",          # color for required gene highlight box 
   refsnp = NULL,                        # snp name (string)
@@ -3104,12 +3160,16 @@ if ( args[['dryRun']] )  {
 
 if ( is.null(args[['reload']]) ) {
     if ( file.exists( args[['metal']]) ) {
+      metal_header = scan(args[['metal']],what=character(),nlines=1);
+      
       col_classes = list();
       pval_col = char2Rname(args[['pvalCol']]);
       col_classes[[pval_col]] = "numeric";
       
       t_color_col = char2Rname(args[['colorCol']])
-      col_classes[[t_color_col]] = "character"
+      if (t_color_col %in% metal_header) { 
+        col_classes[[t_color_col]] = "character"
+      }
 
       metal <- read.file(args[['metal']],sep="\t",colClasses=col_classes,comment.char="");
     } else {
