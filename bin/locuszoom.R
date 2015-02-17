@@ -1175,54 +1175,54 @@ panel.flatbed <- function (
   df0 <- df0[order(df0$idnum),]    # put back into original order
   df0uniq <- df0[df0$new == 1,]
   
-	# Helper function. For each item, return the indexes for each 
-	# match in the target set. Returns only those indexes that match overall, 
-	# not an exact set of matches per item. 
-	match_each = function(items,target) { 
-		unique(unlist(sapply(items,function(x) { which(target == x) })))
-	}	
-	
+  # Helper function. For each item, return the indexes for each 
+  # match in the target set. Returns only those indexes that match overall, 
+  # not an exact set of matches per item. 
+  match_each = function(items,target) { 
+    unique(unlist(sapply(items,function(x) { which(target == x) })))
+  } 
+  
   # If we have a required gene, or isoform, let's make sure
   # they are laid out first.
   reqGene = args[['requiredGene']]
-	reqIDList = NULL
+  reqIDList = NULL
   if (!is.null(reqGene)) {
     req_rows = NULL
     
-		# Some normalization of ENSEMBL IDs
-		reqGene = gsub("\\.\\d+$","",reqGene)
-		df0uniq$nmName = gsub("\\.\\d+$","",df0uniq$nmName)
-		
+    # Some normalization of ENSEMBL IDs
+    reqGene = gsub("\\.\\d+$","",reqGene)
+    df0uniq$nmName = gsub("\\.\\d+$","",df0uniq$nmName)
+    
     # Try matching in the nmName column first, it could be an isoform. 
     iso_matches = match_each(reqGene,df0uniq$nmName);
     if (length(iso_matches) > 0) {
-			reqIDList = df0uniq$idnum[iso_matches]
+      reqIDList = df0uniq$idnum[iso_matches]
       iso_gene = unique(df0uniq[iso_matches,]$name)
       gene_matches = seq(dim(df0uniq)[1])[df0uniq$name %in% iso_gene]
 
       all_matches = union(iso_matches,gene_matches)
       req_rows = c(req_rows,all_matches)
-    } else {		
-			# See if any of them were also matching genes. 
-			# Remember that name is still just gene names at this point. Isoform names are added later. 
-			gene_matches = match_each(reqGene,df0uniq$name)
-			if (length(gene_matches) > 0) {
-				reqIDList = df0uniq$idnum[gene_matches]
-				req_rows = gene_matches
-			}
-		}
+    } else {    
+      # See if any of them were also matching genes. 
+      # Remember that name is still just gene names at this point. Isoform names are added later. 
+      gene_matches = match_each(reqGene,df0uniq$name)
+      if (length(gene_matches) > 0) {
+        reqIDList = df0uniq$idnum[gene_matches]
+        req_rows = gene_matches
+      }
+    }
 
-		req_rows = unique(req_rows)
-		
+    req_rows = unique(req_rows)
+    
     if (!is.null(req_rows)) {
       other_rows = setdiff(seq(dim(df0uniq)[1]),req_rows)
-			
+      
       # Reorder to have the required gene/isoform rows first, and then the rest. 
       df0uniq = df0uniq[c(req_rows,other_rows),]
     }
 
   }
-		
+    
   # determine the row to use
   maxIdnum <- max(c(0,df$idnum))
   id2row <- rep(0,1+maxIdnum)      # keep track of locations for each gene
@@ -1241,7 +1241,7 @@ panel.flatbed <- function (
     return( (x-a) / w )
   }
   
-	df0uniq$rowToUse = -Inf
+  df0uniq$rowToUse = -Inf
   rowIntervals = lapply(seq(1+maxIdnum),function(x) { list(left=NULL,right=NULL) } )
   for (i in 1:dim(df0uniq)[1]) {
     leftGraphic <- native2npc(min(df$start[df$idnum == df0uniq$idnum[i]]))
@@ -1283,10 +1283,10 @@ panel.flatbed <- function (
       next;
     }
     
-		# Check each row to see if this gene can fit. 
+    # Check each row to see if this gene can fit. 
     # This would be *much* faster with IRanges, but we can't require the user
     # to install it, unfortunately. So this slow for loop will have to do. 
-		# If there's ever a LZ R package, then we could replace this easily. 
+    # If there's ever a LZ R package, then we could replace this easily. 
     for (irow in seq(rowIntervals)) {
       intervals = rowIntervals[[irow]]
       
@@ -1314,7 +1314,7 @@ panel.flatbed <- function (
       if (done) { break; }
     }
   }
-	    
+      
   id2row = df0uniq[order(df0uniq$idnum),]$rowToUse
 
   requestedRows = rows;
@@ -1400,41 +1400,41 @@ panel.flatbed <- function (
     y = as.numeric(y)
     return(unit((x + y)/2,"npc"))
   }
-	
+  
   # This code highlights the required gene with a rectangle around it
   if (args[['hiRequiredGene']] & !is.null(args[['requiredGene']]) & length(reqIDList) > 0) {
-		for (requiredGeneIdnum in reqIDList) {
-			requiredGeneIdx = which(df0uniq$idnum == requiredGeneIdnum)
-			
-			# Need the arrow grob to know how wide it is. 
-			at <- arrowText(
-				df0uniq$name[requiredGeneIdx],
-				x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
-				y = yPos(df0uniq$idnum[requiredGeneIdx], text=TRUE),
-				direction = df0uniq$strand[requiredGeneIdx],
-				check.overlap = TRUE, 
-				gp = gpar(cex = cex, fontface='italic',col=textcol,lwd=1.5)
-			);
+    for (requiredGeneIdnum in reqIDList) {
+      requiredGeneIdx = which(df0uniq$idnum == requiredGeneIdnum)
+      
+      # Need the arrow grob to know how wide it is. 
+      at <- arrowText(
+        df0uniq$name[requiredGeneIdx],
+        x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
+        y = yPos(df0uniq$idnum[requiredGeneIdx], text=TRUE),
+        direction = df0uniq$strand[requiredGeneIdx],
+        check.overlap = TRUE, 
+        gp = gpar(cex = cex, fontface='italic',col=textcol,lwd=1.5)
+      );
 
-			npc_width_gene_text = convertUnit(attr(at,"width"),"npc")
-			npc_width_gene_body = unit(diff(as.numeric(df0uniq[requiredGeneIdx,c("left","right")])),"npc")
-			
-			total_height = unit(3.5 * height * increment,"npc") + attr(at,"theight")
+      npc_width_gene_text = convertUnit(attr(at,"width"),"npc")
+      npc_width_gene_body = unit(diff(as.numeric(df0uniq[requiredGeneIdx,c("left","right")])),"npc")
+      
+      total_height = unit(3.5 * height * increment,"npc") + attr(at,"theight")
 
-			y_center = midpoint_npc(
-				yPos(df0uniq$idnum[requiredGeneIdx],text=TRUE),
-				yPos(df0uniq$idnum[requiredGeneIdx],text=FALSE)
-			)
+      y_center = midpoint_npc(
+        yPos(df0uniq$idnum[requiredGeneIdx],text=TRUE),
+        yPos(df0uniq$idnum[requiredGeneIdx],text=FALSE)
+      )
 
-			grid.rect(
-				x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
-				y = y_center,
-				width = 1.025 * max(npc_width_gene_text,npc_width_gene_body),
-				height = total_height,
-				gp = gpar(col=args[['hiRequiredGeneColor']])
-			)
+      grid.rect(
+        x = unit((df0uniq$start[requiredGeneIdx] + df0uniq$stop[requiredGeneIdx])/2, 'npc'),
+        y = y_center,
+        width = 1.025 * max(npc_width_gene_text,npc_width_gene_body),
+        height = total_height,
+        gp = gpar(col=args[['hiRequiredGeneColor']])
+      )
 
-		}
+    }
   }
   
   #sink(NULL);
