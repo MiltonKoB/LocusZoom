@@ -1190,8 +1190,8 @@ panel.flatbed <- function (
     req_rows = NULL
     
     # Some normalization of ENSEMBL IDs
-    reqGene = gsub("\\.\\d+$","",reqGene)
-    df0uniq$nmName = gsub("\\.\\d+$","",df0uniq$nmName)
+    reqGene = gsub("(ENS.*)(\\.\\d+$)","\\1",reqGene)
+    df0uniq$nmName = gsub("(ENS.*)(\\.\\d+$)","\\1",df0uniq$nmName)
     
     # Try matching in the nmName column first, it could be an isoform. 
     iso_matches = match_each(reqGene,df0uniq$nmName);
