@@ -22,7 +22,7 @@ import os
 import sys
 from FileLock import *
 
-LD_CACHE_PROTOCOL = "1.3";
+LD_CACHE_PROTOCOL = "1.4";
 
 class LDRegionCache():
   def __init__(self,key,dbfile):
@@ -39,7 +39,7 @@ class LDRegionCache():
       existed = True;
     
     try:
-      self.db = shelve.open(dbfile);
+      self.db = shelve.open(dbfile,protocol=2);
       self.opened = True;
     except:
       self.opened = False;
