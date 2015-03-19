@@ -2071,7 +2071,12 @@ def main():
         kill_dir(temp_dir);
 
       # Create the directory.
-      os.mkdir(temp_dir);
+      try:
+        os.mkdir(temp_dir);
+      except:
+        print >> sys.stderr, "Error: Tried to create temporary directory %s but failed" % temp_dir
+        print >> sys.stderr, "Current working directory is: %s" % os.getcwd()
+        raise
 
       # Change into our temporary directory. This is where files will be generated
       # while creating the plot. locuszoom.R, new_fugue, and m2zfast will all
