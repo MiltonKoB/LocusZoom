@@ -640,6 +640,10 @@ def read_epacts(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tr
     has_index = os.path.isfile(epacts_file + ".tbi");
     tabix_path = find_systematic(conf.TABIX_PATH);
 
+    if not has_index:
+      print >> sys.stderr, "Warning: EPACTS file was given, but could not find tabix index for it. " \
+                           "EPACTS should have generated a tabix index for this file."
+
     # Do we have both tabix, and the EPACTS file has a tabix index?
     f = None;
     if has_index and tabix_path is not None:
