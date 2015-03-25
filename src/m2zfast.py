@@ -1765,11 +1765,18 @@ def fixUserLD(file,refsnp,db_file):
     print >> sys.stderr, "Error: user-supplied LD file does not contain the reference SNP %s.." % str(refsnp);
     return None;
 
-def windows_filename(name):
-  bad_chars = "\\ / : * ? \" < >".split();
+def windows_file_replace_chars(name):
+  bad_chars = "\\ / : * ? \" < > |".split();
   for c in bad_chars:
     name = name.replace(c,"_");
   
+  return name;
+
+def windows_path_replace_chars(name):
+  bad_chars = ": * ? \" < > |".split();
+  for c in bad_chars:
+    name = name.replace(c,"_");
+
   return name;
 
 def runQuery(query,args):
@@ -2088,6 +2095,15 @@ def main():
         temp_dir += time.strftime("%y%m%d") + "_";
       temp_dir += str(entry[0]);
 
+      # Fix directories to not have characters that are invalid on Windows.
+      temp_dir = windows_path_replace_chars(temp_dir)
+
+      # Check that this directory is valid.
+      if temp_dir in ("","/"):
+        raise IOError, "Error: temporary directory is not valid, was: %s, contact developer" % temp_dir
+
+      import ipdb; ipdb.set_trace()
+
       if _DEBUG:
         print "DEBUG: plot directory: %s" % temp_dir;
 
@@ -2169,7 +2185,7 @@ def main():
               new_image_name += opts.prefix + "_";
             if not opts.no_date:
               new_image_name += time.strftime("%y%m%d") + "_";
-            new_image_name += windows_filename(str(entry[0]));
+            new_image_name += windows_file_replace_chars(str(entry[0]));
             new_image_name += ext;
 
             try:
