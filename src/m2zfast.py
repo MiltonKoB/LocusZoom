@@ -552,6 +552,8 @@ def read_metal(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_f
   found_chrpos = False;
   min_snp = None;
   min_pval = decimal.Decimal(1);
+  marker_count = 0
+  invalid_pval_count = 0
   for line in f:
     # Skip blank lines. 
     if line.rstrip() == "":
@@ -575,7 +577,8 @@ def read_metal(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_f
 
     if snp in sptable:
       found_in_region = True;
-      
+      marker_count += 1
+
       # Insert fixed log10 p-value
       pval = e[pval_col];
   
@@ -598,10 +601,13 @@ def read_metal(metal_file,snp_column,pval_column,no_transform,chr,start,end,db_f
         elements = (schr,spos) + tuple(e);
         print >> out, format_str % elements;
       else:
-        print >> sys.stderr, "Warning: SNP %s has invalid p-value: %s, skipping.." % (snp,str(pval));
+        invalid_pval_count += 1
 
   f.close();
   out.close();
+
+  if invalid_pval_count > 0:
+    print >> sys.stderr, "Warning: of %i markers in the region, %i had invalid or missing p-values" % (marker_count,invalid_pval_count)
   
   if found_chrpos:
     print >> sys.stderr, "";
@@ -702,6 +708,8 @@ def read_epacts(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tr
   min_snp = None;
   min_pval = decimal.Decimal(1);
   skipped_markers = [];
+  marker_count = 0
+  invalid_pval_count = 0
   for line in f:
     # Skip blank lines. 
     if line.rstrip() == "":
@@ -727,7 +735,8 @@ def read_epacts(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tr
     if file_chrom == chr and file_begin >= start and file_end <= end:
       # Did we find a SNP in this region at all? 
       found_in_region = True;
-      
+      marker_count += 1
+
       pval = e[i_pval_col];
   
       if is_number(pval):     
@@ -747,10 +756,13 @@ def read_epacts(epacts_file,chr,start,end,chr_col,beg_col,end_col,pval_col,no_tr
         out_values = tuple([file_chrom,file_begin,marker_name,pval] + [e[x] for x in extra_ind])
         print >> out, format_str % out_values;
       else:
-        print >> sys.stderr, "Warning: marker at position %s has invalid p-value: %s, skipping.." % (marker_name,str(pval));
+        invalid_pval_count += 1
 
   if len(skipped_markers) > 0:
     print >> sys.stderr, "Warning: skipped %i markers that did not appear to be SNPs.." % len(skipped_markers);
+
+  if invalid_pval_count > 0:
+    print >> sys.stderr, "Warning: of %i markers in the region, %i had invalid or missing p-values" % (marker_count,invalid_pval_count)
 
   f.close();
   out.close();
