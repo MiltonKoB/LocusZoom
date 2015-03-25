@@ -2106,8 +2106,6 @@ def main():
       if temp_dir in ("","/"):
         raise IOError, "Error: temporary directory is not valid, was: %s, contact developer" % temp_dir
 
-      import ipdb; ipdb.set_trace()
-
       if _DEBUG:
         print "DEBUG: plot directory: %s" % temp_dir;
 
