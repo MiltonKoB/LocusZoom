@@ -1040,8 +1040,14 @@ def printOpts(opts):
   
   if opts.metal:
     table.add_row(['metal',os.path.split(opts.metal)[1]]);
+    table.add_row(['markercol',opts.snpcol])
+    table.add_row(['pvalcol',opts.pvalcol])
   elif opts.epacts:
     table.add_row(['epacts',os.path.split(opts.epacts)[1]]);
+    table.add_row(["epacts-chr-col",opts.epacts_chr_col])
+    table.add_row(["epacts-beg-colcol",opts.epacts_beg_col])
+    table.add_row(["epacts-end-col",opts.epacts_end_col])
+    table.add_row(["epacts-pval-col",opts.epacts_pval_col])
 
   if opts.refsnp:
     table.add_row(['refsnp',opts.refsnp]);
@@ -1084,6 +1090,8 @@ def printArgs(args):
   table.set_field_align('Value','l');
   
   d = parse_rargs(args);
+  del d["markerCol"]
+  del d["pvalCol"]
   for i,j in d.iteritems():
     table.add_row([str(i),str(j)]);
   
@@ -2017,7 +2025,11 @@ def main():
   print "Options in effect are:\n";
   printOpts(opts);
   print "";
-  if len(args) > 0:
+
+  display_args = parse_rargs(args)
+  del display_args["markerCol"]
+  del display_args["pvalCol"]
+  if len(display_args) > 0:
     print "Plotting parameters in effect are:\n";
     printArgs(args);
     print "";
