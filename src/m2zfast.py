@@ -49,6 +49,7 @@ from textwrap import fill
 from vcf_ld import *
 from verboseparser import *
 from cStringIO import StringIO
+from ordered_set import OrderedSet
 
 # Try importing modules that may not exist on a user's machine. 
 try:
@@ -1056,12 +1057,14 @@ def printOpts(opts):
   if opts.gwas_cat:
     table.add_row(['gwas-cat',opts.gwas_cat]);
 
-  display_opts = ('flank','build','ld','ld_measure','pop','source','snpset','db','gene_table','cache',
+  display_opts = OrderedSet([
+    'flank','build','ld','ld_measure','pop','source','snpset','db','gene_table','cache',
     'no_clean','no_transform','enable_db_annot','verbose','m2zpath','plotonly'
-  );
+  ]);
  
   if opts.ld_vcf:
     table.add_row(['ld-vcf',os.path.split(opts.ld_vcf)[1]]);
+    display_opts = display_opts - {"pop","source"}
 
   if opts.condsnps:
     cond_snps = [str(i) for i in opts.condsnps];
